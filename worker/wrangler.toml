@@ -49,6 +49,3 @@ secret_name = "ADMIN_NEON_DB_URL"
 binding = "TRACK_PIXEL_BASE_URL"
 store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
 secret_name = "TRACK_PIXEL_BASE_URL"
-
-[triggers]
-crons = ["*/5 * * * *"]   # Check for scheduled campaigns every 5 min
