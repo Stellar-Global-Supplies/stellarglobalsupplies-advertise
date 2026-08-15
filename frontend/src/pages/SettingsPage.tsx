@@ -67,7 +67,7 @@ export default function SettingsPage() {
         </div>
         <div>
           <label className="label">Email</label>
-          <input className="input" value={settings?.email || ''} disabled
+          <input value={settings?.email || ''} disabled
             className="input bg-slate-50 text-slate-400 cursor-not-allowed" />
           <p className="text-xs text-slate-400 mt-1">Managed by Supabase Auth</p>
         </div>
