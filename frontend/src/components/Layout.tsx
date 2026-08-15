@@ -28,7 +28,7 @@ export default function Layout() {
             <div className="w-8 h-8 bg-brand-500 rounded-lg flex items-center justify-center">
               <Zap size={16} className="text-white" />
             </div>
-            <span className="font-semibold text-slate-900">AdPlatform</span>
+            <span className="font-semibold text-slate-900">Stellar Advertise</span>
           </div>
         </div>
 
