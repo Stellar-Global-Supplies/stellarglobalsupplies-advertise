@@ -1,0 +1,54 @@
+name = "adplatform-worker"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[[d1_databases]]
+binding = "DB"
+database_name = "adplatform-db"
+database_id = "e7887010-4a18-472b-8167-fc60e53fea5e"   # replace after: wrangler d1 create adplatform-db
+
+[vars]
+SUPABASE_URL = "https://hwljdlgoysqaujzcnpeu.supabase.co"
+FRONTEND_URL = "https://advertise.stellarglobalsupplies.com"
+
+# ── Secrets Store ──────────────────────────────────────────────────────────────
+# 1. Create your store (once):
+#      wrangler secrets-store store create adplatform-secrets
+#
+# 2. Add each secret (replace YOUR_STORE_ID after step 1):
+#      wrangler secrets-store secret create SUPABASE_SERVICE_KEY --store-id YOUR_STORE_ID --value "..."
+#      wrangler secrets-store secret create SUPABASE_ANON_KEY    --store-id YOUR_STORE_ID --value "..."
+#      wrangler secrets-store secret create NEON_DATABASE_URL    --store-id YOUR_STORE_ID --value "..."
+#      wrangler secrets-store secret create TRACK_PIXEL_BASE_URL --store-id YOUR_STORE_ID --value "..."
+#
+# 3. Each secret_access block below binds one secret into the worker.
+#    Replace store_id on every block with your actual store ID.
+# ───────────────────────────────────────────────────────────────────────────────
+
+[[secrets_store_secrets]]
+binding = "SUPABASE_SERVICE_KEY"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "SUPABASE_SERVICE_KEY"
+
+[[secrets_store_secrets]]
+binding = "SUPABASE_ANON_KEY"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "SUPABASE_ANON_KEY"
+
+[[secrets_store_secrets]]
+binding = "NEON_DATABASE_URL"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "ADMIN_NEON_DB_URL"
+
+[[secrets_store_secrets]]
+binding = "TRACK_PIXEL_BASE_URL"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "TRACK_PIXEL_BASE_URL"
+
+[triggers]
+crons = ["*/5 * * * *"]   # Check for scheduled campaigns every 5 min
