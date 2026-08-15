@@ -53,9 +53,9 @@ route('PUT',    '/api/settings',                        R.updateSettings);
 
 // Send campaign endpoint
 route('POST', '/api/campaigns/:id/send', async (req, env, params) => {
-  const user = await requireAuth(req, env).catch(r => { throw r; });
-  const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ? AND user_id = ?')
-    .bind(params.id, user.id).first() as { status: string } | null;
+  await requireAuth(req, env).catch(r => { throw r; });
+  const campaign = await env.DB.prepare("SELECT * FROM campaigns WHERE id = ? AND org_id = 'default'")
+    .bind(params.id).first() as { status: string } | null;
   if (!campaign) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
   if (campaign.status === 'sending' || campaign.status === 'sent') {
     return new Response(JSON.stringify({ error: 'Already sent or sending' }), { status: 400 });
@@ -116,8 +116,8 @@ export default {
 
         if (send) {
           await env.DB.prepare(`
-            INSERT OR IGNORE INTO unsubscribes (id, user_id, email, campaign_id)
-            VALUES (?, ?, ?, ?)
+            INSERT OR IGNORE INTO unsubscribes (id, user_id, org_id, email, campaign_id)
+            VALUES (?, ?, 'default', ?, ?)
           `).bind(crypto.randomUUID(), send.user_id, send.recipient_email, send.campaign_id).run();
 
           await env.DB.prepare(`

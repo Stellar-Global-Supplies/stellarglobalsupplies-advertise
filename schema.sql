@@ -126,3 +126,60 @@ CREATE INDEX IF NOT EXISTS idx_events_created ON email_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_templates_user ON templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_images_user ON images(user_id);
 CREATE INDEX IF NOT EXISTS idx_unsubscribes_email ON unsubscribes(email);
+
+-- ================================================================
+-- Migration: Convert per-user isolation → shared org workspace
+-- Run: wrangler d1 execute adplatform-db --file=migration_shared_workspace.sql
+-- ================================================================
+
+
+ALTER TABLE templates     ADD COLUMN org_id TEXT;
+ALTER TABLE images        ADD COLUMN org_id TEXT;
+ALTER TABLE contact_lists ADD COLUMN org_id TEXT;
+ALTER TABLE campaigns     ADD COLUMN org_id TEXT;
+ALTER TABLE unsubscribes  ADD COLUMN org_id TEXT;
+
+
+CREATE TABLE IF NOT EXISTS org_settings (
+  org_id              TEXT PRIMARY KEY DEFAULT 'default',
+  name                TEXT DEFAULT 'Stellar Global Supplies',
+  gmail_client_id     TEXT,
+  gmail_client_secret TEXT,
+  gmail_refresh_token TEXT,
+  gmail_sender_email  TEXT,
+  updated_at          TEXT DEFAULT (datetime('now'))
+);
+
+
+INSERT OR IGNORE INTO org_settings (org_id) VALUES ('default');
+
+
+UPDATE templates     SET org_id = 'default' WHERE org_id IS NULL;
+UPDATE images        SET org_id = 'default' WHERE org_id IS NULL;
+UPDATE contact_lists SET org_id = 'default' WHERE org_id IS NULL;
+UPDATE campaigns     SET org_id = 'default' WHERE org_id IS NULL;
+UPDATE unsubscribes  SET org_id = 'default' WHERE org_id IS NULL;
+
+INSERT INTO org_settings (
+  org_id, gmail_client_id, gmail_client_secret, gmail_refresh_token, gmail_sender_email
+)
+SELECT
+  'default',
+  gmail_client_id,
+  gmail_client_secret,
+  gmail_refresh_token,
+  gmail_sender_email
+FROM users
+WHERE gmail_refresh_token IS NOT NULL
+LIMIT 1
+ON CONFLICT(org_id) DO UPDATE SET
+  gmail_client_id     = excluded.gmail_client_id,
+  gmail_client_secret = excluded.gmail_client_secret,
+  gmail_refresh_token = excluded.gmail_refresh_token,
+  gmail_sender_email  = excluded.gmail_sender_email;
+
+CREATE INDEX IF NOT EXISTS idx_templates_org     ON templates(org_id);
+CREATE INDEX IF NOT EXISTS idx_images_org        ON images(org_id);
+CREATE INDEX IF NOT EXISTS idx_contact_lists_org ON contact_lists(org_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_org     ON campaigns(org_id);
+CREATE INDEX IF NOT EXISTS idx_unsubscribes_org  ON unsubscribes(org_id);
