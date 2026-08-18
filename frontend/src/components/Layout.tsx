@@ -1,27 +1,31 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { supabase } from '../lib/api';
 import {
   LayoutDashboard, FileText, Image, Users, Mail,
   BarChart2, Settings, LogOut, Zap
 } from 'lucide-react';
 
+const LANDING_URL = (import.meta.env.VITE_LANDING_URL as string) || 'https://apps.stellarglobalsupplies.com';
+
 const nav = [
   { to: '/dashboard',     label: 'Dashboard',     icon: LayoutDashboard },
-  { to: '/campaigns',     label: 'Campaigns',     icon: Mail },
-  { to: '/templates',     label: 'Templates',     icon: FileText },
-  { to: '/images',        label: 'Image Library', icon: Image },
-  { to: '/contact-lists', label: 'Contact Lists', icon: Users },
-  { to: '/analytics',     label: 'Analytics',     icon: BarChart2 },
-  { to: '/settings',      label: 'Settings',      icon: Settings },
+  { to: '/campaigns',     label: 'Campaigns',     icon: Mail            },
+  { to: '/templates',     label: 'Templates',     icon: FileText        },
+  { to: '/images',        label: 'Image Library', icon: Image           },
+  { to: '/contact-lists', label: 'Contact Lists', icon: Users           },
+  { to: '/analytics',     label: 'Analytics',     icon: BarChart2       },
+  { to: '/settings',      label: 'Settings',      icon: Settings        },
 ];
 
 export default function Layout() {
-  const navigate = useNavigate();
-  const signOut = async () => { await supabase.auth.signOut(); navigate('/'); };
+  // ✅ Sign out of Supabase then return to portal
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    window.location.replace(LANDING_URL);
+  };
 
   return (
     <div className="flex h-screen bg-slate-50">
-      {/* Sidebar */}
       <aside className="w-60 bg-white border-r flex flex-col shrink-0">
         <div className="p-5 border-b">
           <div className="flex items-center gap-2">
@@ -35,8 +39,7 @@ export default function Layout() {
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
           {nav.map(({ to, label, icon: Icon }) => (
             <NavLink
-              key={to}
-              to={to}
+              key={to} to={to}
               className={({ isActive }) =>
                 `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
@@ -59,7 +62,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
