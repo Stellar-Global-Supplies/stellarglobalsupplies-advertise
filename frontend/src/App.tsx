@@ -2,20 +2,36 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/api';
 import type { Session } from '@supabase/supabase-js';
-import Layout from './components/Layout';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import TemplatesPage from './pages/TemplatesPage';
-import ImagesPage from './pages/ImagesPage';
-import ContactListsPage from './pages/ContactListsPage';
-import CampaignsPage from './pages/CampaignsPage';
-import CampaignEditorPage from './pages/CampaignEditorPage';
-import AnalyticsPage from './pages/AnalyticsPage';
+import Layout               from './components/Layout';
+import SSOCallback          from './components/SSOCallback';
+import LoginPage            from './pages/LoginPage';
+import DashboardPage        from './pages/DashboardPage';
+import TemplatesPage        from './pages/TemplatesPage';
+import ImagesPage           from './pages/ImagesPage';
+import ContactListsPage     from './pages/ContactListsPage';
+import CampaignsPage        from './pages/CampaignsPage';
+import CampaignEditorPage   from './pages/CampaignEditorPage';
+import AnalyticsPage        from './pages/AnalyticsPage';
 import CampaignAnalyticsPage from './pages/CampaignAnalyticsPage';
-import SettingsPage from './pages/SettingsPage';
+import SettingsPage         from './pages/SettingsPage';
+
+// ✅ Handle /sso-callback before any session check
+if (window.location.pathname === '/sso-callback') {
+  const root = document.getElementById('root')!;
+  import('./components/SSOCallback').then(({ default: SSOCallback }) => {
+    import('react-dom/client').then(({ createRoot }) => {
+      createRoot(root).render(<SSOCallback />);
+    });
+  });
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+
+  // ✅ Render SSO callback route before session check
+  if (window.location.pathname === '/sso-callback') {
+    return <SSOCallback />;
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
@@ -23,6 +39,7 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Loading
   if (session === undefined) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -31,10 +48,12 @@ export default function App() {
     );
   }
 
+  // ✅ No session — show LoginPage which redirects to portal
   if (!session) {
     return (
       <BrowserRouter>
         <Routes>
+          <Route path="/sso-callback" element={<SSOCallback />} />
           <Route path="*" element={<LoginPage />} />
         </Routes>
       </BrowserRouter>
@@ -44,18 +63,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/sso-callback" element={<SSOCallback />} />
         <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/templates" element={<TemplatesPage />} />
-          <Route path="/images" element={<ImagesPage />} />
-          <Route path="/contact-lists" element={<ContactListsPage />} />
-          <Route path="/campaigns" element={<CampaignsPage />} />
-          <Route path="/campaigns/new" element={<CampaignEditorPage />} />
-          <Route path="/campaigns/:id/edit" element={<CampaignEditorPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/analytics/:id" element={<CampaignAnalyticsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/"                    element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard"           element={<DashboardPage />} />
+          <Route path="/templates"           element={<TemplatesPage />} />
+          <Route path="/images"              element={<ImagesPage />} />
+          <Route path="/contact-lists"       element={<ContactListsPage />} />
+          <Route path="/campaigns"           element={<CampaignsPage />} />
+          <Route path="/campaigns/new"       element={<CampaignEditorPage />} />
+          <Route path="/campaigns/:id/edit"  element={<CampaignEditorPage />} />
+          <Route path="/analytics"           element={<AnalyticsPage />} />
+          <Route path="/analytics/:id"       element={<CampaignAnalyticsPage />} />
+          <Route path="/settings"            element={<SettingsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

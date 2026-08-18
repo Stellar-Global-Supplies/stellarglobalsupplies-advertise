@@ -13,8 +13,8 @@
     "jose": "^5.3.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240725.0",
-    "typescript": "^5.5.2",
-    "wrangler": "^3.60.3"
+    "@cloudflare/workers-types": "^5.20260811.1",
+    "typescript":                "^5.5.4",
+    "wrangler":                  "^4.0.0"
   }
 }
