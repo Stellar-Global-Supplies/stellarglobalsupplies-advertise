@@ -51,6 +51,22 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// Multipart upload helper — sends FormData with auth token (no Content-Type so the browser sets the boundary)
+async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const token = await getValidToken();
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
+    throw new Error(err.error || 'Upload failed');
+  }
+  return res.json();
+}
+
 // Templates
 export const api = {
   templates: {
@@ -63,10 +79,6 @@ export const api = {
     list: () => apiFetch<ImageRecord[]>('/api/images'),
     save: (data: Partial<ImageRecord>) => apiFetch<ImageRecord>('/api/images', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id: string) => apiFetch(`/api/images/${id}`, { method: 'DELETE' }),
-    getUploadUrl: (filename: string, mime_type: string) =>
-      apiFetch<{ signed_url: string; public_url: string; path: string }>('/api/images/upload-url', {
-        method: 'POST', body: JSON.stringify({ filename, mime_type })
-      }),
   },
   contactLists: {
     list: () => apiFetch<ContactList[]>('/api/contact-lists'),
@@ -153,14 +165,10 @@ export interface UserSettings {
   gmail_refresh_token?: string; gmail_sender_email?: string;
 }
 
-// Upload image to Supabase storage
+// Upload image via worker proxy to Supabase storage
 export async function uploadImage(file: File): Promise<ImageRecord> {
-  const { signed_url, public_url } = await api.images.getUploadUrl(file.name, file.type);
-  const res = await fetch(signed_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type },
-    body: file,
-  });
-  if (!res.ok) throw new Error('Upload failed');
-  return api.images.save({ name: file.name, url: public_url, size_bytes: file.size, mime_type: file.type });
+  const form = new FormData();
+  form.append('file', file);
+  form.append('name', file.name);
+  return apiUpload<ImageRecord>('/api/images/upload', form);
 }

@@ -363,32 +363,49 @@ export const updateSettings: Handler = async (req, env) => {
 };
 
 // ──────────────────────────────────────────────
-// SUPABASE STORAGE SIGNED UPLOAD URL
+// SUPABASE STORAGE UPLOAD (proxied through worker)
 // ──────────────────────────────────────────────
 
-export const getUploadUrl: Handler = async (req, env) => {
+export const uploadImage: Handler = async (req, env) => {
   const user = await requireAuth(req, env).catch(r => { throw r; });
-  const body = await req.json() as { filename: string; mime_type: string };
-  const path = `${user.id}/${Date.now()}-${body.filename}`;
+
+  const form = await req.formData();
+  const file = form.get('file');
+  if (!(file instanceof File)) return err('file is required');
+
+  const name = (form.get('name') as string) || file.name;
+  const safeName = name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `${user.id}/${Date.now()}-${safeName}`;
 
   const supabaseServiceKey = await env.SUPABASE_SERVICE_KEY.get();
 
   const res = await fetch(
-    `${env.SUPABASE_URL}/storage/v1/object/upload/sign/ad-images/${path}`,
+    `${env.SUPABASE_URL}/storage/v1/object/ad-images/${path}`,
     {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         Authorization: `Bearer ${supabaseServiceKey}`,
         apikey: supabaseServiceKey,
-        'Content-Type': 'application/json',
+        'Content-Type': file.type || 'application/octet-stream',
+        'x-upsert': 'false',
       },
-      body: JSON.stringify({ expiresIn: 300 }),
+      body: file,
     }
   );
 
-  if (!res.ok) return err('Failed to generate upload URL', 500);
-  const data = await res.json() as { signedURL: string; token: string; path: string };
+  if (!res.ok) {
+    const bodyText = await res.text().catch(() => '');
+    console.error('Supabase upload failed:', res.status, bodyText);
+    return err(`Failed to upload to storage (${res.status})`, 500);
+  }
 
   const publicUrl = `${env.SUPABASE_URL}/storage/v1/object/public/ad-images/${path}`;
-  return json({ signed_url: `${env.SUPABASE_URL}/storage/v1${data.signedURL}`, public_url: publicUrl, path });
+  const id = crypto.randomUUID();
+
+  await env.DB.prepare(`
+    INSERT INTO images (id, user_id, org_id, name, url, size_bytes, mime_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, user.id, ORG_ID, name, publicUrl, file.size, file.type || null).run();
+
+  return json(await env.DB.prepare('SELECT * FROM images WHERE id = ?').bind(id).first(), 201);
 };

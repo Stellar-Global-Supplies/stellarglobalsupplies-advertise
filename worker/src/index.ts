@@ -32,7 +32,7 @@ route('DELETE', '/api/templates/:id',                   R.deleteTemplate);
 route('GET',    '/api/images',                          R.listImages);
 route('POST',   '/api/images',                          R.saveImage);
 route('DELETE', '/api/images/:id',                      R.deleteImage);
-route('POST',   '/api/images/upload-url',               R.getUploadUrl);
+route('POST',   '/api/images/upload',                   R.uploadImage);
 
 route('GET',    '/api/contact-lists',                   R.listContactLists);
 route('POST',   '/api/contact-lists',                   R.createContactList);
