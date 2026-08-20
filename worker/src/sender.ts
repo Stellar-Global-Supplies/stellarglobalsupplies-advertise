@@ -9,7 +9,7 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
     .bind(campaignId).first() as {
       id: string; user_id: string; org_id: string; subject: string; html_content: string;
       contact_list_id: string; from_name: string; from_email: string; reply_to: string;
-      status: string;
+      status: string; product_name?: string; product_image_url?: string;
     } | null;
 
   if (!campaign) throw new Error('Campaign not found');
@@ -80,7 +80,9 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
         const unsubUrl = `${trackPixelBaseUrl}/t/unsub/${sendId}`;
         let html = campaign.html_content
           .replace(/\{\{name\}\}/gi, contact.name || 'there')
-          .replace(/\{\{email\}\}/gi, contact.email);
+          .replace(/\{\{email\}\}/gi, contact.email)
+          .replace(/\{\{product_name\}\}/gi, campaign.product_name || '')
+          .replace(/\{\{product_image_url\}\}/gi, campaign.product_image_url || '');
 
         if (!html.includes('Unsubscribe')) {
           html += `<p style="font-size:11px;color:#999;text-align:center;margin-top:32px">

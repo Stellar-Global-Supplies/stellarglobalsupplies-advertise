@@ -70,6 +70,7 @@ export const api = {
 export interface Template {
   id: string; user_id: string; name: string; subject: string;
   html_content: string; preview_text?: string; thumbnail_url?: string;
+  product_name?: string; product_image_url?: string;
   created_at: string; updated_at: string;
 }
 

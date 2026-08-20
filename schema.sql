@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS templates (
   html_content TEXT NOT NULL,
   preview_text TEXT,
   thumbnail_url TEXT,
+  product_name TEXT,
+  product_image_url TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -183,3 +185,11 @@ CREATE INDEX IF NOT EXISTS idx_images_org        ON images(org_id);
 CREATE INDEX IF NOT EXISTS idx_contact_lists_org ON contact_lists(org_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_org     ON campaigns(org_id);
 CREATE INDEX IF NOT EXISTS idx_unsubscribes_org  ON unsubscribes(org_id);
+
+-- ================================================================
+-- Migration: Add product_name and product_image_url to templates
+-- Run: wrangler d1 execute adplatform-db --file=schema.sql
+-- (safe to re-run — uses IF NOT EXISTS / column-add guards)
+-- ================================================================
+ALTER TABLE templates ADD COLUMN product_name TEXT;
+ALTER TABLE templates ADD COLUMN product_image_url TEXT;

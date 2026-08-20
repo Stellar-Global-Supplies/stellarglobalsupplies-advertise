@@ -31,14 +31,14 @@ export const listTemplates: Handler = async (req, env) => {
 
 export const createTemplate: Handler = async (req, env) => {
   const user = await requireAuth(req, env).catch(r => { throw r; });
-  const body = await req.json() as { name: string; subject: string; html_content: string; preview_text?: string };
+  const body = await req.json() as { name: string; subject: string; html_content: string; preview_text?: string; product_name?: string; product_image_url?: string };
   if (!body.name || !body.html_content) return err('name and html_content required');
 
   const id = crypto.randomUUID();
   await env.DB.prepare(`
-    INSERT INTO templates (id, user_id, org_id, name, subject, html_content, preview_text)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, user.id, ORG_ID, body.name, body.subject || '', body.html_content, body.preview_text || null).run();
+    INSERT INTO templates (id, user_id, org_id, name, subject, html_content, preview_text, product_name, product_image_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, user.id, ORG_ID, body.name, body.subject || '', body.html_content, body.preview_text || null, body.product_name || null, body.product_image_url || null).run();
 
   return json(await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first(), 201);
 };
@@ -53,9 +53,9 @@ export const updateTemplate: Handler = async (req, env, params) => {
   if (!existing) return err('Template not found', 404);
 
   await env.DB.prepare(`
-    UPDATE templates SET name=?, subject=?, html_content=?, preview_text=?, updated_at=datetime('now')
+    UPDATE templates SET name=?, subject=?, html_content=?, preview_text=?, product_name=?, product_image_url=?, updated_at=datetime('now')
     WHERE id = ? AND org_id = ?
-  `).bind(body.name, body.subject, body.html_content, body.preview_text || null, id, ORG_ID).run();
+  `).bind(body.name, body.subject, body.html_content, body.preview_text || null, body.product_name || null, body.product_image_url || null, id, ORG_ID).run();
 
   return json(await env.DB.prepare('SELECT * FROM templates WHERE id = ?').bind(id).first());
 };

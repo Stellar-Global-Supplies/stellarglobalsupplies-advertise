@@ -16,11 +16,12 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
         <!-- Body -->
         <tr><td style="padding:40px">
           <h2 style="color:#1e293b;margin:0 0 16px">Hello {{name}},</h2>
-          <p style="color:#475569;line-height:1.6;margin:0 0 24px">Your email body goes here. Use {{name}} and {{email}} as merge tags.</p>
-          <!-- Image placeholder -->
-          <!-- <img src="YOUR_IMAGE_URL" style="width:100%;border-radius:8px;margin-bottom:24px" /> -->
+          <p style="color:#475569;line-height:1.6;margin:0 0 24px">Check out our featured product below. Use {{name}}, {{email}}, {{product_name}}, and {{product_image_url}} as merge tags.</p>
+          <!-- Product section -->
+          <p style="color:#1e293b;font-size:20px;font-weight:600;margin:0 0 16px">{{product_name}}</p>
+          <img src="{{product_image_url}}" alt="{{product_name}}" style="width:100%;border-radius:8px;margin-bottom:24px" />
           <a href="https://yoursite.com" style="display:inline-block;background:#4361ee;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600">
-            Call to Action
+            Shop Now
           </a>
         </td></tr>
         <!-- Footer -->
@@ -43,17 +44,24 @@ function TemplateModal({ template, onClose, onSave }: TemplateModalProps) {
   const [name, setName] = useState(template?.name || '');
   const [subject, setSubject] = useState(template?.subject || '');
   const [html, setHtml] = useState(template?.html_content || STARTER_TEMPLATE);
+  const [productName, setProductName] = useState(template?.product_name || '');
+  const [productImageUrl, setProductImageUrl] = useState(template?.product_image_url || '');
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Replace merge tags for preview rendering
+  const previewHtml = html
+    .replace(/\{\{product_name\}\}/gi, productName || 'Sample Product')
+    .replace(/\{\{product_image_url\}\}/gi, productImageUrl || 'https://via.placeholder.com/600x400?text=Product+Image');
 
   const save = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
     setSaving(true);
     try {
       const saved = template
-        ? await api.templates.update(template.id, { name, subject, html_content: html })
-        : await api.templates.create({ name, subject, html_content: html });
+        ? await api.templates.update(template.id, { name, subject, html_content: html, product_name: productName, product_image_url: productImageUrl })
+        : await api.templates.create({ name, subject, html_content: html, product_name: productName, product_image_url: productImageUrl });
       onSave(saved);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to save');
@@ -77,14 +85,22 @@ function TemplateModal({ template, onClose, onSave }: TemplateModalProps) {
           </div>
         </div>
 
-        <div className="flex gap-4 p-4 border-b">
-          <div className="flex-1">
+        <div className="flex gap-4 p-4 border-b flex-wrap">
+          <div className="flex-1 min-w-[200px]">
             <label className="label">Template name</label>
             <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Summer Sale 2024" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-[200px]">
             <label className="label">Default subject line</label>
             <input className="input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Don't miss our summer deals!" />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="label">Product name <span className="text-slate-400 font-normal">(replaces {'{{product_name}}'})</span></label>
+            <input className="input" value={productName} onChange={e => setProductName(e.target.value)} placeholder="Stellar Pro Widget" />
+          </div>
+          <div className="flex-1 min-w-[200px]">
+            <label className="label">Product image URL <span className="text-slate-400 font-normal">(replaces {'{{product_image_url}}'})</span></label>
+            <input className="input" value={productImageUrl} onChange={e => setProductImageUrl(e.target.value)} placeholder="https://example.com/product.jpg" />
           </div>
         </div>
 
@@ -93,7 +109,7 @@ function TemplateModal({ template, onClose, onSave }: TemplateModalProps) {
         <div className="flex-1 overflow-hidden">
           {preview ? (
             <iframe
-              srcDoc={html}
+              srcDoc={previewHtml}
               className="w-full h-full border-0"
               title="Template preview"
               sandbox="allow-same-origin"
