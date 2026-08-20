@@ -90,7 +90,7 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e9ef;border-radius:4px;overflow:hidden">
         <!-- Product Image -->
         <tr><td style="background:#f7f9fb;border-bottom:1px solid #e5e9ef;padding:0">
-          <img src="{{product_image_url}}" alt="{{product_name}}" width="556" style="width:100%;max-height:280px;object-fit:cover;display:block" />
+          <img src="{{product_image_url}}" alt="{{product_name}}" width="556" style="width:100%;max-height:330px;object-fit:cover;display:block" />
         </td></tr>
         <!-- Product Body -->
         <tr><td style="padding:24px">
