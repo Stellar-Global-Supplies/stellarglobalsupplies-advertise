@@ -7,17 +7,43 @@ export const supabase = createClient(
 
 const API = import.meta.env.VITE_API_URL;
 
-async function authHeaders(): Promise<Record<string, string>> {
+async function getValidToken(): Promise<string> {
+  // First try the cached session
   const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) return session.access_token;
+
+  // Session not ready yet (race on first load) — force a refresh
+  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+  return refreshed?.access_token ?? '';
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getValidToken();
   return {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${session?.access_token ?? ''}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = await authHeaders();
   const res = await fetch(`${API}${path}`, { ...options, headers: { ...headers, ...options?.headers } });
+
+  // On 401 the token may have just expired — refresh once and retry
+  if (res.status === 401) {
+    const { data: { session } } = await supabase.auth.refreshSession();
+    const retryHeaders = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session?.access_token ?? ''}`,
+    };
+    const retry = await fetch(`${API}${path}`, { ...options, headers: { ...retryHeaders, ...options?.headers } });
+    if (!retry.ok) {
+      const err = await retry.json().catch(() => ({ error: retry.statusText })) as { error: string };
+      throw new Error(err.error || 'Request failed');
+    }
+    return retry.json();
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
     throw new Error(err.error || 'Request failed');
