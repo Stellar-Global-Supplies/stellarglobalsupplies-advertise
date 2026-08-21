@@ -184,7 +184,7 @@ export default function CampaignEditorPage() {
               srcDoc={form.html_content}
               className="w-full h-full border-0 bg-white"
               title="Preview"
-              sandbox="allow-same-origin allow-scripts allow-popups"
+              sandbox="allow-same-origin allow-scripts allow-popups allow-top-navigation-by-user-activation"
             />
           ) : (
             <textarea
@@ -214,7 +214,7 @@ export default function CampaignEditorPage() {
                   onClick={() => applyTemplate(t)}>
                   <div className="h-32 bg-slate-50 overflow-hidden relative">
                     <iframe srcDoc={t.html_content} className="w-full h-full scale-[0.4] origin-top-left pointer-events-none"
-                      style={{ width: '250%', height: '250%' }} sandbox="allow-same-origin allow-scripts allow-popups" />
+                      style={{ width: '250%', height: '250%' }} sandbox="allow-same-origin allow-scripts allow-popups allow-top-navigation-by-user-activation" />
                   </div>
                   <div className="p-3">
                     <p className="font-medium text-sm truncate">{t.name}</p>

@@ -29,7 +29,7 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
   <!-- TOP BAR -->
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#00B98E;border-radius:4px 4px 0 0">
     <tr><td style="padding:9px 24px;font-family:'Inter',Arial,sans-serif;font-size:11px;color:rgba(255,255,255,0.9);text-align:center">
-      Special bulk pricing available — <a href="tel:+919637655556" style="color:#fff;font-weight:700;text-decoration:underline">Call +91 9637655556</a>
+      Special bulk pricing available — <a href="tel:+919637655556" target="_blank" style="color:#fff;font-weight:700;text-decoration:underline">Call +91 9637655556</a>
     </td></tr>
   </table>
 
@@ -38,7 +38,7 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
     <tr>
       <td style="padding:22px 28px" valign="middle">
         <!-- Logo image -->
-        <a href="https://www.stellarglobalsupplies.com/" style="display:inline-block;text-decoration:none">
+        <a href="https://www.stellarglobalsupplies.com/" target="_blank" style="display:inline-block;text-decoration:none">
           <img src="https://www.stellarglobalsupplies.com/img/logo.jpg"
                alt="Stellar Global Supplies"
                width="140" height="40"
@@ -46,8 +46,8 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
         </a>
       </td>
       <td style="padding:22px 28px;text-align:right" valign="middle" class="hide-mobile">
-        <a href="tel:+919637655556" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;display:block;line-height:1.8">+91 9637655556</a>
-        <a href="mailto:stellarglobalsupplies@gmail.com" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;display:block;line-height:1.8">stellarglobalsupplies@gmail.com</a>
+        <a href="tel:+919637655556" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;display:block;line-height:1.8">+91 9637655556</a>
+        <a href="mailto:stellarglobalsupplies@gmail.com" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.7);font-size:12px;text-decoration:none;display:block;line-height:1.8">stellarglobalsupplies@gmail.com</a>
       </td>
     </tr>
   </table>
@@ -63,7 +63,7 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
         Premium Industrial Materials,<br /><span style="color:#00B98E">Delivered to Your Doorstep</span>
       </h1>
       <p style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.65);font-size:14px;line-height:1.6;margin-bottom:26px">Quality-verified SS, MS &amp; Fastening products — precision-sourced from Pune's most trusted industrial partner.</p>
-      <a href="https://www.stellarglobalsupplies.com/promotional-products/" class="cta-btn" style="display:inline-block;background:#00B98E;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:700;padding:13px 28px;border-radius:3px;text-decoration:none">View All Promotional Products →</a>
+      <a href="https://www.stellarglobalsupplies.com/promotional-products/" target="_blank" class="cta-btn" style="display:inline-block;background:#00B98E;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:700;padding:13px 28px;border-radius:3px;text-decoration:none">View All Promotional Products →</a>
     </td></tr>
   </table>
 
@@ -123,8 +123,8 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
             </tr>
           </table>
           <!-- CTAs -->
-          <a href="https://www.stellarglobalsupplies.com/promotional-products/" class="cta-btn" style="display:inline-block;background:#0a1628;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:700;padding:12px 22px;border-radius:3px;text-decoration:none;margin-right:10px">Enquire Now</a>
-          <a href="tel:+919637655556" class="cta-btn" style="display:inline-block;background:transparent;color:#0a1628;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:600;padding:11px 18px;border-radius:3px;text-decoration:none;border:1.5px solid #d1d5db">📞 Call for Pricing</a>
+          <a href="https://api.whatsapp.com/message/QWNLYNBUH5Y3H1?autoload=1&app_absent=0&utm_source=ig" target="_blank" class="cta-btn" style="display:inline-block;background:#0a1628;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:700;padding:12px 22px;border-radius:3px;text-decoration:none;margin-right:10px">Enquire Now</a>
+          <a href="tel:+919637655556" target="_blank" class="cta-btn" style="display:inline-block;background:transparent;color:#0a1628;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:600;padding:11px 18px;border-radius:3px;text-decoration:none;border:1.5px solid #d1d5db">📞 Call for Pricing</a>
         </td></tr>
       </table>
     </td></tr>
@@ -159,8 +159,8 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
     <tr><td class="pad" style="padding:36px 32px;text-align:center">
       <h2 style="font-family:'Inter',Arial,sans-serif;color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-bottom:8px">Ready to Place Your Order?</h2>
       <p style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.85);font-size:13px;margin-bottom:22px">Tell us your material, grade, quantity, and timeline — quote back within 24 hours.</p>
-      <a href="tel:+919637655556" class="cta-btn" style="display:inline-block;background:#ffffff;color:#00946f;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:800;padding:13px 28px;border-radius:3px;text-decoration:none;margin-right:8px">📞 Call Now</a>
-      <a href="mailto:stellarglobalsupplies@gmail.com" class="cta-btn" style="display:inline-block;background:transparent;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:600;padding:12px 20px;border-radius:3px;text-decoration:none;border:1.5px solid rgba(255,255,255,0.6)">Email a Requirement</a>
+      <a href="tel:+919637655556" target="_blank" class="cta-btn" style="display:inline-block;background:#ffffff;color:#00946f;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:800;padding:13px 28px;border-radius:3px;text-decoration:none;margin-right:8px">📞 Call Now</a>
+      <a href="mailto:stellarglobalsupplies@gmail.com" target="_blank" class="cta-btn" style="display:inline-block;background:transparent;color:#ffffff;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:600;padding:12px 20px;border-radius:3px;text-decoration:none;border:1.5px solid rgba(255,255,255,0.6)">Email a Requirement</a>
     </td></tr>
   </table>
 
@@ -171,12 +171,12 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
         <td class="contact-cell" style="text-align:center;border-right:1px solid #edf0f4;padding:0 12px 0 0">
           <div style="font-size:16px;margin-bottom:4px">📞</div>
           <div style="font-family:'Inter',Arial,sans-serif;color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Phone</div>
-          <a href="tel:+919637655556" style="font-family:'Inter',Arial,sans-serif;color:#0a1628;font-size:12px;font-weight:600;text-decoration:none">+91 9637655556</a>
+          <a href="tel:+919637655556" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:#0a1628;font-size:12px;font-weight:600;text-decoration:none">+91 9637655556</a>
         </td>
         <td class="contact-cell" style="text-align:center;border-right:1px solid #edf0f4;padding:0 12px">
           <div style="font-size:16px;margin-bottom:4px">✉</div>
           <div style="font-family:'Inter',Arial,sans-serif;color:#9ca3af;font-size:10px;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:3px">Email</div>
-          <a href="mailto:stellarglobalsupplies@gmail.com" style="font-family:'Inter',Arial,sans-serif;color:#0a1628;font-size:11px;font-weight:600;text-decoration:none">stellarglobalsupplies@gmail.com</a>
+          <a href="mailto:stellarglobalsupplies@gmail.com" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:#0a1628;font-size:11px;font-weight:600;text-decoration:none">stellarglobalsupplies@gmail.com</a>
         </td>
         <td class="contact-cell" style="text-align:center;padding:0 0 0 12px">
           <div style="font-size:16px;margin-bottom:4px">📍</div>
@@ -196,9 +196,9 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
         Business Hours: Mon–Sat, 9:00 AM – 6:00 PM
       </div>
       <div style="margin-bottom:16px">
-        <a href="https://www.stellarglobalsupplies.com/" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Home</a>
-        <a href="https://www.stellarglobalsupplies.com/promotional-products/" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Products</a>
-        <a href="https://www.stellarglobalsupplies.com/#contact" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Contact</a>
+        <a href="https://www.stellarglobalsupplies.com/" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Home</a>
+        <a href="https://www.stellarglobalsupplies.com/promotional-products/" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Products</a>
+        <a href="https://www.stellarglobalsupplies.com/#contact" target="_blank" style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.45);font-size:11px;text-decoration:none;margin:0 8px">Contact</a>
       </div>
       <div style="font-family:'Inter',Arial,sans-serif;color:rgba(255,255,255,0.25);font-size:10px;line-height:1.6">
         You're receiving this because you're a valued customer or enquired about our products.<br />
@@ -292,7 +292,7 @@ function TemplateModal({ template, onClose, onSave }: TemplateModalProps) {
               srcDoc={previewHtml}
               className="w-full h-full border-0"
               title="Template preview"
-              sandbox="allow-same-origin allow-scripts allow-popups"
+              sandbox="allow-same-origin allow-scripts allow-popups allow-top-navigation-by-user-activation"
             />
           ) : (
             <textarea
@@ -367,7 +367,7 @@ export default function TemplatesPage() {
                   className="w-full h-full scale-[0.4] origin-top-left pointer-events-none"
                   style={{ width: '250%', height: '250%' }}
                   title={t.name}
-                  sandbox="allow-same-origin allow-scripts allow-popups"
+                  sandbox="allow-same-origin allow-scripts allow-popups allow-top-navigation-by-user-activation"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/20 group-hover:bg-brand-500/10 transition-colors" />
               </div>
