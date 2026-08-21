@@ -1,132 +1,203 @@
 import { Env } from './types';
-import { getContactsFromNeon } from './neon';
-import { sendEmail, injectTracking } from './gmail';
+import { requireAuth } from './auth';
+import { sendCampaign } from './sender';
+import * as R from './routes';
 
-const ORG_ID = 'default';
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+};
 
-export async function sendCampaign(campaignId: string, env: Env): Promise<void> {
-  const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ?')
-    .bind(campaignId).first() as {
-      id: string; user_id: string; org_id: string; subject: string; html_content: string;
-      contact_list_id: string; from_name: string; from_email: string; reply_to: string;
-      status: string; product_name?: string; product_image_url?: string;
-    } | null;
+function withCors(res: Response): Response {
+  const r = new Response(res.body, res);
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => r.headers.set(k, v));
+  return r;
+}
 
-  if (!campaign) throw new Error('Campaign not found');
-  if (campaign.status === 'sending' || campaign.status === 'sent') return;
+// Tiny router — ctx threaded through so handlers can use waitUntil
+type RouteHandler = (
+  req: Request,
+  env: Env,
+  params: Record<string, string>,
+  ctx: ExecutionContext
+) => Promise<Response>;
 
-  await env.DB.prepare("UPDATE campaigns SET status='sending', updated_at=datetime('now') WHERE id=?")
-    .bind(campaignId).run();
+const routes: Array<{ method: string; pattern: URLPattern; handler: RouteHandler }> = [];
 
-  // ── Use shared org Gmail config (not per-user) ──
-  const org = await env.DB.prepare('SELECT * FROM org_settings WHERE org_id = ?')
-    .bind(ORG_ID).first() as {
-      gmail_client_id: string; gmail_client_secret: string;
-      gmail_refresh_token: string; gmail_sender_email: string;
-    } | null;
+function route(method: string, path: string, handler: RouteHandler) {
+  routes.push({ method, pattern: new URLPattern({ pathname: path }), handler });
+}
 
-  if (!org?.gmail_refresh_token) {
-    await env.DB.prepare("UPDATE campaigns SET status='failed' WHERE id=?").bind(campaignId).run();
-    throw new Error('Gmail not configured in org settings');
+// ── Register routes ──────────────────────────────────────────────────────────
+
+route('GET',    '/api/templates',                       R.listTemplates);
+route('POST',   '/api/templates',                       R.createTemplate);
+route('PUT',    '/api/templates/:id',                   R.updateTemplate);
+route('DELETE', '/api/templates/:id',                   R.deleteTemplate);
+
+route('GET',    '/api/images',                          R.listImages);
+route('POST',   '/api/images',                          R.saveImage);
+route('DELETE', '/api/images/:id',                      R.deleteImage);
+route('POST',   '/api/images/upload',                   R.uploadImage);
+
+route('GET',    '/api/contact-lists',                   R.listContactLists);
+route('POST',   '/api/contact-lists',                   R.createContactList);
+route('POST',   '/api/contact-lists/:id/sync',          R.syncContactList);
+route('DELETE', '/api/contact-lists/:id',               R.deleteContactList);
+
+route('GET',    '/api/campaigns',                       R.listCampaigns);
+route('POST',   '/api/campaigns',                       R.createCampaign);
+route('GET',    '/api/campaigns/:id',                   R.getCampaign);
+route('PUT',    '/api/campaigns/:id',                   R.updateCampaign);
+route('DELETE', '/api/campaigns/:id',                   R.deleteCampaign);
+
+route('GET',    '/api/analytics',                       R.getAnalyticsSummary);
+route('GET',    '/api/analytics/:id',                   R.getCampaignAnalytics);
+
+route('GET',    '/api/settings',                        R.getSettings);
+route('PUT',    '/api/settings',                        R.updateSettings);
+
+// ── Send campaign — uses ctx.waitUntil so the worker stays alive ─────────────
+route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
+  await requireAuth(req, env).catch(r => { throw r; });
+
+  const campaign = await env.DB.prepare(
+    "SELECT * FROM campaigns WHERE id = ? AND org_id = 'default'"
+  ).bind(params.id).first() as { status: string } | null;
+
+  if (!campaign) {
+    return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+      status: 404, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  if (campaign.status === 'sending' || campaign.status === 'sent') {
+    return new Response(JSON.stringify({ error: 'Already sent or sending' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
-  // Get contact list
-  const list = await env.DB.prepare('SELECT * FROM contact_lists WHERE id = ?')
-    .bind(campaign.contact_list_id).first() as {
-      neon_table_name: string; neon_email_column: string; neon_name_column: string;
-    } | null;
-
-  if (!list) throw new Error('Contact list not found');
-
-  // Get org-wide unsubscribes
-  const unsubs = await env.DB.prepare('SELECT email FROM unsubscribes WHERE org_id = ?')
-    .bind(ORG_ID).all();
-  const excludeEmails = (unsubs.results as { email: string }[]).map(r => r.email);
-
-  const [neonDatabaseUrl, trackPixelBaseUrl] = await Promise.all([
-    env.NEON_DATABASE_URL.get(),
-    env.TRACK_PIXEL_BASE_URL.get(),
-  ]);
-
-  const contacts = await getContactsFromNeon(
-    neonDatabaseUrl,
-    list.neon_table_name,
-    list.neon_email_column,
-    list.neon_name_column,
-    excludeEmails
+  // ctx.waitUntil keeps the worker alive until sendCampaign fully resolves —
+  // without this the worker dies as soon as the 202 response is returned,
+  // which is why campaigns were getting stuck in "sending" / falling back to draft.
+  ctx.waitUntil(
+    sendCampaign(params.id, env).catch(async (err) => {
+      console.error('sendCampaign failed:', err);
+      // Mark as failed so the UI shows the real state instead of hanging on "sending"
+      await env.DB.prepare(
+        "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
+      ).bind(params.id).run().catch(() => {});
+    })
   );
 
-  await env.DB.prepare('UPDATE campaigns SET total_recipients = ? WHERE id = ?')
-    .bind(contacts.length, campaignId).run();
+  return new Response(JSON.stringify({ message: 'Campaign sending started' }), {
+    status: 202, headers: { 'Content-Type': 'application/json' },
+  });
+});
 
-  const gmailConfig = {
-    clientId: org.gmail_client_id,
-    clientSecret: org.gmail_client_secret,
-    refreshToken: org.gmail_refresh_token,
-    senderEmail: campaign.from_email || org.gmail_sender_email,
-    fromName: campaign.from_name || undefined,
-  };
+// ── Main fetch handler ───────────────────────────────────────────────────────
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
 
-  let sentCount = 0;
-  let failedCount = 0;
-  const BATCH_SIZE = 5;
-
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    const batch = contacts.slice(i, i + BATCH_SIZE);
-    await Promise.allSettled(
-      batch.map(async (contact) => {
-        const sendId = crypto.randomUUID();
-
-        const unsubUrl = `${trackPixelBaseUrl}/t/unsub/${sendId}`;
-        let html = campaign.html_content
-          .replace(/\{\{name\}\}/gi, contact.name || 'there')
-          .replace(/\{\{email\}\}/gi, contact.email)
-          .replace(/\{\{product_name\}\}/gi, campaign.product_name || '')
-          .replace(/\{\{product_image_url\}\}/gi, campaign.product_image_url || '');
-
-        if (!html.includes('Unsubscribe')) {
-          html += `<p style="font-size:11px;color:#999;text-align:center;margin-top:32px">
-            <a href="${unsubUrl}" style="color:#999">Unsubscribe</a>
-          </p>`;
-        }
-        html = injectTracking(html, trackPixelBaseUrl, sendId);
-
-        await env.DB.prepare(`
-          INSERT INTO campaign_sends (id, campaign_id, recipient_email, recipient_name, status)
-          VALUES (?, ?, ?, ?, 'pending')
-        `).bind(sendId, campaignId, contact.email, contact.name || null).run();
-
-        try {
-          const messageId = await sendEmail({
-            config: gmailConfig,
-            to: contact.email,
-            toName: contact.name,
-            subject: campaign.subject,
-            htmlBody: html,
-            replyTo: campaign.reply_to || undefined,
-            messageId: sendId,
-          });
-
-          await env.DB.prepare(`
-            UPDATE campaign_sends SET status='sent', sent_at=datetime('now'), message_id=? WHERE id=?
-          `).bind(messageId, sendId).run();
-          sentCount++;
-        } catch (e) {
-          await env.DB.prepare(`
-            UPDATE campaign_sends SET status='failed', error_message=? WHERE id=?
-          `).bind(String(e), sendId).run();
-          failedCount++;
-        }
-      })
-    );
-
-    if (i + BATCH_SIZE < contacts.length) {
-      await new Promise(r => setTimeout(r, 1000));
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
-  }
 
-  await env.DB.prepare(`
-    UPDATE campaigns SET status='sent', sent_at=datetime('now'),
-    sent_count=?, failed_count=?, updated_at=datetime('now') WHERE id=?
-  `).bind(sentCount, failedCount, campaignId).run();
-}
+    // ── Tracking endpoints (no auth, no secrets needed) ──────────────────────
+
+    // Open pixel
+    if (url.pathname.startsWith('/t/open/')) {
+      const sendId = url.pathname.split('/t/open/')[1];
+      if (sendId) {
+        ctx.waitUntil(
+          env.DB.prepare(`
+            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
+            SELECT ?, campaign_id, id, recipient_email, 'open' FROM campaign_sends WHERE id = ?
+          `).bind(crypto.randomUUID(), sendId).run().catch(() => {})
+        );
+      }
+      const gif = new Uint8Array([71,73,70,56,57,97,1,0,1,0,0,0,0,33,249,4,0,0,0,0,0,44,0,0,0,0,1,0,1,0,0,2,0,59]);
+      return new Response(gif, { headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'no-cache' } });
+    }
+
+    // Click tracking
+    if (url.pathname.startsWith('/t/click/')) {
+      const sendId = url.pathname.split('/t/click/')[1];
+      const targetUrl = url.searchParams.get('url') || '/';
+      if (sendId) {
+        const metadata = JSON.stringify({ url: targetUrl, user_agent: request.headers.get('user-agent') });
+        ctx.waitUntil(
+          env.DB.prepare(`
+            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type, metadata)
+            SELECT ?, campaign_id, id, recipient_email, 'click', ? FROM campaign_sends WHERE id = ?
+          `).bind(crypto.randomUUID(), metadata, sendId).run().catch(() => {})
+        );
+      }
+      return Response.redirect(targetUrl, 302);
+    }
+
+    // Unsubscribe
+    if (url.pathname.startsWith('/t/unsub/')) {
+      const sendId = url.pathname.split('/t/unsub/')[1];
+      if (sendId) {
+        const send = await env.DB.prepare(
+          'SELECT cs.*, c.user_id FROM campaign_sends cs JOIN campaigns c ON c.id = cs.campaign_id WHERE cs.id = ?'
+        ).bind(sendId).first() as { recipient_email: string; campaign_id: string; user_id: string } | null;
+
+        if (send) {
+          await env.DB.prepare(`
+            INSERT OR IGNORE INTO unsubscribes (id, user_id, org_id, email, campaign_id)
+            VALUES (?, ?, 'default', ?, ?)
+          `).bind(crypto.randomUUID(), send.user_id, send.recipient_email, send.campaign_id).run();
+
+          await env.DB.prepare(`
+            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
+            VALUES (?, ?, ?, ?, 'unsubscribe')
+          `).bind(crypto.randomUUID(), send.campaign_id, sendId, send.recipient_email).run();
+        }
+      }
+
+      return new Response(`<!DOCTYPE html><html><body style="font-family:sans-serif;text-align:center;padding:80px">
+        <h2>You've been unsubscribed</h2>
+        <p>You won't receive further emails from this sender.</p>
+      </body></html>`, { headers: { 'Content-Type': 'text/html' } });
+    }
+
+    // ── API routes ────────────────────────────────────────────────────────────
+    try {
+      for (const { method, pattern, handler } of routes) {
+        if (request.method !== method) continue;
+        const match = pattern.exec(url);
+        if (match) {
+          const params = match.pathname.groups as Record<string, string>;
+          const res = await handler(request, env, params, ctx);
+          return withCors(res);
+        }
+      }
+    } catch (thrown) {
+      if (thrown instanceof Response) return withCors(thrown);
+      console.error(thrown);
+      return withCors(new Response(JSON.stringify({ error: 'Internal server error' }), {
+        status: 500, headers: { 'Content-Type': 'application/json' },
+      }));
+    }
+
+    return new Response(JSON.stringify({ error: 'Not found' }), {
+      status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  },
+
+  // Cron: send scheduled campaigns
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    const due = await env.DB.prepare(`
+      SELECT id FROM campaigns
+      WHERE status = 'scheduled' AND scheduled_at <= datetime('now')
+    `).all();
+
+    for (const row of due.results as { id: string }[]) {
+      ctx.waitUntil(sendCampaign(row.id, env).catch(console.error));
+    }
+  },
+} satisfies ExportedHandler<Env>;

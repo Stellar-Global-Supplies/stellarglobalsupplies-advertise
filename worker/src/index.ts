@@ -15,15 +15,22 @@ function withCors(res: Response): Response {
   return r;
 }
 
-// Tiny router
-type RouteHandler = (req: Request, env: Env, params: Record<string, string>) => Promise<Response>;
+// Tiny router — ctx threaded through so handlers can use waitUntil
+type RouteHandler = (
+  req: Request,
+  env: Env,
+  params: Record<string, string>,
+  ctx: ExecutionContext
+) => Promise<Response>;
+
 const routes: Array<{ method: string; pattern: URLPattern; handler: RouteHandler }> = [];
 
 function route(method: string, path: string, handler: RouteHandler) {
   routes.push({ method, pattern: new URLPattern({ pathname: path }), handler });
 }
 
-// Register routes
+// ── Register routes ──────────────────────────────────────────────────────────
+
 route('GET',    '/api/templates',                       R.listTemplates);
 route('POST',   '/api/templates',                       R.createTemplate);
 route('PUT',    '/api/templates/:id',                   R.updateTemplate);
@@ -51,25 +58,46 @@ route('GET',    '/api/analytics/:id',                   R.getCampaignAnalytics);
 route('GET',    '/api/settings',                        R.getSettings);
 route('PUT',    '/api/settings',                        R.updateSettings);
 
-// Send campaign endpoint
-route('POST', '/api/campaigns/:id/send', async (req, env, params) => {
+// ── Send campaign — uses ctx.waitUntil so the worker stays alive ─────────────
+route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
   await requireAuth(req, env).catch(r => { throw r; });
-  const campaign = await env.DB.prepare("SELECT * FROM campaigns WHERE id = ? AND org_id = 'default'")
-    .bind(params.id).first() as { status: string } | null;
-  if (!campaign) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+
+  const campaign = await env.DB.prepare(
+    "SELECT * FROM campaigns WHERE id = ? AND org_id = 'default'"
+  ).bind(params.id).first() as { status: string } | null;
+
+  if (!campaign) {
+    return new Response(JSON.stringify({ error: 'Campaign not found' }), {
+      status: 404, headers: { 'Content-Type': 'application/json' },
+    });
+  }
   if (campaign.status === 'sending' || campaign.status === 'sent') {
-    return new Response(JSON.stringify({ error: 'Already sent or sending' }), { status: 400 });
+    return new Response(JSON.stringify({ error: 'Already sent or sending' }), {
+      status: 400, headers: { 'Content-Type': 'application/json' },
+    });
   }
 
-  // Fire and forget
-  sendCampaign(params.id, env).catch(console.error);
+  // ctx.waitUntil keeps the worker alive until sendCampaign fully resolves —
+  // without this the worker dies as soon as the 202 response is returned,
+  // which is why campaigns were getting stuck in "sending" / falling back to draft.
+  ctx.waitUntil(
+    sendCampaign(params.id, env).catch(async (err) => {
+      console.error('sendCampaign failed:', err);
+      // Mark as failed so the UI shows the real state instead of hanging on "sending"
+      await env.DB.prepare(
+        "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
+      ).bind(params.id).run().catch(() => {});
+    })
+  );
+
   return new Response(JSON.stringify({ message: 'Campaign sending started' }), {
-    status: 202, headers: { 'Content-Type': 'application/json' }
+    status: 202, headers: { 'Content-Type': 'application/json' },
   });
 });
 
+// ── Main fetch handler ───────────────────────────────────────────────────────
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // CORS preflight
@@ -77,16 +105,18 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
-    // ── Tracking endpoints (no auth, no secrets needed) ────────────────────────
+    // ── Tracking endpoints (no auth, no secrets needed) ──────────────────────
 
     // Open pixel
     if (url.pathname.startsWith('/t/open/')) {
       const sendId = url.pathname.split('/t/open/')[1];
       if (sendId) {
-        await env.DB.prepare(`
-          INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
-          SELECT ?, campaign_id, id, recipient_email, 'open' FROM campaign_sends WHERE id = ?
-        `).bind(crypto.randomUUID(), sendId).run().catch(() => {});
+        ctx.waitUntil(
+          env.DB.prepare(`
+            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
+            SELECT ?, campaign_id, id, recipient_email, 'open' FROM campaign_sends WHERE id = ?
+          `).bind(crypto.randomUUID(), sendId).run().catch(() => {})
+        );
       }
       const gif = new Uint8Array([71,73,70,56,57,97,1,0,1,0,0,0,0,33,249,4,0,0,0,0,0,44,0,0,0,0,1,0,1,0,0,2,0,59]);
       return new Response(gif, { headers: { 'Content-Type': 'image/gif', 'Cache-Control': 'no-cache' } });
@@ -98,10 +128,12 @@ export default {
       const targetUrl = url.searchParams.get('url') || '/';
       if (sendId) {
         const metadata = JSON.stringify({ url: targetUrl, user_agent: request.headers.get('user-agent') });
-        await env.DB.prepare(`
-          INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type, metadata)
-          SELECT ?, campaign_id, id, recipient_email, 'click', ? FROM campaign_sends WHERE id = ?
-        `).bind(crypto.randomUUID(), metadata, sendId).run().catch(() => {});
+        ctx.waitUntil(
+          env.DB.prepare(`
+            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type, metadata)
+            SELECT ?, campaign_id, id, recipient_email, 'click', ? FROM campaign_sends WHERE id = ?
+          `).bind(crypto.randomUUID(), metadata, sendId).run().catch(() => {})
+        );
       }
       return Response.redirect(targetUrl, 302);
     }
@@ -133,14 +165,14 @@ export default {
       </body></html>`, { headers: { 'Content-Type': 'text/html' } });
     }
 
-    // ── API routes ──────────────────────────────────────────────
+    // ── API routes ────────────────────────────────────────────────────────────
     try {
       for (const { method, pattern, handler } of routes) {
         if (request.method !== method) continue;
         const match = pattern.exec(url);
         if (match) {
           const params = match.pathname.groups as Record<string, string>;
-          const res = await handler(request, env, params);
+          const res = await handler(request, env, params, ctx);
           return withCors(res);
         }
       }
@@ -153,7 +185,7 @@ export default {
     }
 
     return new Response(JSON.stringify({ error: 'Not found' }), {
-      status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+      status: 404, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   },
 

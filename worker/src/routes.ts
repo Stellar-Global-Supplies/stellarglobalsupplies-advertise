@@ -4,7 +4,7 @@ import { countContacts } from './neon';
 
 const ORG_ID = 'default';
 
-type Handler = (request: Request, env: Env, params?: Record<string, string>) => Promise<Response>;
+type Handler = (request: Request, env: Env, params?: Record<string, string>, ctx?: ExecutionContext) => Promise<Response>;
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
