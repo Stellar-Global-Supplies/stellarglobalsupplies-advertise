@@ -292,7 +292,7 @@ function TemplateModal({ template, onClose, onSave }: TemplateModalProps) {
               srcDoc={previewHtml}
               className="w-full h-full border-0"
               title="Template preview"
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts allow-popups"
             />
           ) : (
             <textarea
@@ -367,7 +367,7 @@ export default function TemplatesPage() {
                   className="w-full h-full scale-[0.4] origin-top-left pointer-events-none"
                   style={{ width: '250%', height: '250%' }}
                   title={t.name}
-                  sandbox="allow-same-origin"
+                  sandbox="allow-same-origin allow-scripts allow-popups"
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/20 group-hover:bg-brand-500/10 transition-colors" />
               </div>

@@ -46,7 +46,15 @@ export default function CampaignEditorPage() {
     setForm(p => ({ ...p, [k]: e.target.value }));
 
   const applyTemplate = (t: Template) => {
-    setForm(p => ({ ...p, html_content: t.html_content, subject: p.subject || t.subject }));
+    // Substitute saved product_name and product_image_url from the template into the HTML
+    let html = t.html_content;
+    if (t.product_name) {
+      html = html.replace(/\{\{product_name\}\}/gi, t.product_name);
+    }
+    if (t.product_image_url) {
+      html = html.replace(/\{\{product_image_url\}\}/gi, t.product_image_url);
+    }
+    setForm(p => ({ ...p, html_content: html, subject: p.subject || t.subject }));
     setShowTemplates(false);
   };
 
@@ -176,7 +184,7 @@ export default function CampaignEditorPage() {
               srcDoc={form.html_content}
               className="w-full h-full border-0 bg-white"
               title="Preview"
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts allow-popups"
             />
           ) : (
             <textarea
@@ -206,7 +214,7 @@ export default function CampaignEditorPage() {
                   onClick={() => applyTemplate(t)}>
                   <div className="h-32 bg-slate-50 overflow-hidden relative">
                     <iframe srcDoc={t.html_content} className="w-full h-full scale-[0.4] origin-top-left pointer-events-none"
-                      style={{ width: '250%', height: '250%' }} sandbox="allow-same-origin" />
+                      style={{ width: '250%', height: '250%' }} sandbox="allow-same-origin allow-scripts allow-popups" />
                   </div>
                   <div className="p-3">
                     <p className="font-medium text-sm truncate">{t.name}</p>
