@@ -56,7 +56,7 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
     excludeEmails
   );
 
-  await env.DB.prepare('UPDATE campaigns SET total_recipients = ? WHERE id = ?')
+  await env.DB.prepare("UPDATE campaigns SET total_recipients=?, updated_at=datetime('now') WHERE id=?")
     .bind(contacts.length, campaignId).run();
 
   const gmailConfig = {
@@ -108,13 +108,14 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
           });
 
           await env.DB.prepare(`
-            UPDATE campaign_sends SET status='sent', sent_at=datetime('now'), message_id=? WHERE id=?
+            UPDATE campaign_sends SET status='sent', message_id=?, sent_at=datetime('now') WHERE id=?
           `).bind(messageId, sendId).run();
           sentCount++;
         } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
           await env.DB.prepare(`
             UPDATE campaign_sends SET status='failed', error_message=? WHERE id=?
-          `).bind(String(e), sendId).run();
+          `).bind(msg, sendId).run();
           failedCount++;
         }
       })
@@ -126,7 +127,6 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
   }
 
   await env.DB.prepare(`
-    UPDATE campaigns SET status='sent', sent_at=datetime('now'),
-    sent_count=?, failed_count=?, updated_at=datetime('now') WHERE id=?
+    UPDATE campaigns SET status='sent', sent_at=datetime('now'), sent_count=?, failed_count=?, updated_at=datetime('now') WHERE id=?
   `).bind(sentCount, failedCount, campaignId).run();
 }
