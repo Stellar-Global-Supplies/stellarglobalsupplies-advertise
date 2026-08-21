@@ -1,0 +1,21 @@
+# JavaScript modules — must be served with correct MIME type
+/assets/*.js
+  Content-Type: application/javascript; charset=utf-8
+
+/assets/*.mjs
+  Content-Type: application/javascript; charset=utf-8
+
+# CSS
+/assets/*.css
+  Content-Type: text/css; charset=utf-8
+
+# Fonts & images — cache aggressively (Vite hashes filenames)
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML — never cache so new deploys are picked up immediately
+/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/*
+  Cache-Control: no-cache
