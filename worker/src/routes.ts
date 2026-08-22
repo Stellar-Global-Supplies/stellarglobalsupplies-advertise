@@ -265,13 +265,19 @@ export const getAnalyticsSummary: Handler = async (req, env) => {
 
   const overall = await env.DB.prepare(`
     SELECT
-      COUNT(DISTINCT c.id) as total_campaigns,
-      SUM(c.sent_count) as total_sent,
+      COUNT(*) as total_campaigns,
+      COALESCE(SUM(sent_count), 0) as total_sent
+    FROM campaigns
+    WHERE org_id = ? AND status = 'sent'
+  `).bind(ORG_ID).first() as { total_campaigns: number; total_sent: number };
+
+  const eventTotals = await env.DB.prepare(`
+    SELECT
       COUNT(DISTINCT CASE WHEN e.event_type='open' THEN e.id END) as total_opens,
       COUNT(DISTINCT CASE WHEN e.event_type='click' THEN e.id END) as total_clicks,
       COUNT(DISTINCT CASE WHEN e.event_type='unsubscribe' THEN e.id END) as total_unsubs
-    FROM campaigns c
-    LEFT JOIN email_events e ON e.campaign_id = c.id
+    FROM email_events e
+    JOIN campaigns c ON c.id = e.campaign_id
     WHERE c.org_id = ? AND c.status = 'sent'
   `).bind(ORG_ID).first();
 
@@ -295,7 +301,12 @@ export const getAnalyticsSummary: Handler = async (req, env) => {
     GROUP BY url ORDER BY clicks DESC LIMIT 10
   `).bind(ORG_ID).all();
 
-  return json({ overall, campaigns: campaigns.results, timeline: timeline.results, topLinks: topLinks.results });
+  return json({
+    overall: { ...overall, ...eventTotals },
+    campaigns: campaigns.results,
+    timeline: timeline.results,
+    topLinks: topLinks.results,
+  });
 };
 
 export const getCampaignAnalytics: Handler = async (req, env, params) => {

@@ -71,8 +71,19 @@ export default function CampaignEditorPage() {
   };
 
   const save = async (sendNow = false) => {
-    if (!form.name || !form.html_content || !form.contact_list_id) {
-      setError('Name, HTML content, and a contact list are required'); return;
+    const missing: string[] = [];
+    if (!form.name.trim()) missing.push('a campaign name');
+    if (!form.html_content.trim()) missing.push('HTML content');
+    if (!form.contact_list_id) {
+      missing.push(
+        lists.length === 0
+          ? 'a contact list (you have none yet — add one on the Contact Lists page)'
+          : 'a contact list (select one in the panel on the left)'
+      );
+    }
+    if (missing.length) {
+      setError(`Missing: ${missing.join(', ')}`);
+      return;
     }
     setSaving(true); setError('');
     try {
@@ -143,12 +154,26 @@ export default function CampaignEditorPage() {
           </div>
           <div>
             <label className="label">Contact list *</label>
-            <select className="input" value={form.contact_list_id} onChange={set('contact_list_id')}>
-              <option value="">Select a list…</option>
+            <select
+              className={`input ${!form.contact_list_id && error ? 'ring-2 ring-red-400' : ''}`}
+              value={form.contact_list_id}
+              onChange={set('contact_list_id')}
+              disabled={lists.length === 0}
+            >
+              <option value="">{lists.length === 0 ? 'No lists yet' : 'Select a list…'}</option>
               {lists.map(l => (
                 <option key={l.id} value={l.id}>{l.name} ({l.subscriber_count.toLocaleString()})</option>
               ))}
             </select>
+            {lists.length === 0 && (
+              <p className="text-xs text-red-500 mt-1">
+                You need a contact list before you can save. Go to{' '}
+                <button type="button" className="underline" onClick={() => navigate('/contact-lists')}>
+                  Contacts
+                </button>{' '}
+                and add one first.
+              </p>
+            )}
           </div>
           <div>
             <label className="label">From name</label>
