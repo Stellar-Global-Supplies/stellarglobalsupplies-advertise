@@ -85,6 +85,11 @@ export const api = {
     create: (data: Partial<ContactList>) => apiFetch<ContactList>('/api/contact-lists', { method: 'POST', body: JSON.stringify(data) }),
     sync: (id: string) => apiFetch(`/api/contact-lists/${id}/sync`, { method: 'POST' }),
     delete: (id: string) => apiFetch(`/api/contact-lists/${id}`, { method: 'DELETE' }),
+    addEmails: (id: string, payload: { text?: string; emails?: string[] }) =>
+      apiFetch<AddEmailsResult>(`/api/contact-lists/${id}/emails`, { method: 'POST', body: JSON.stringify(payload) }),
+    listEmails: (id: string) => apiFetch<ManualEmail[]>(`/api/contact-lists/${id}/emails`),
+    deleteEmail: (id: string, emailId: string) =>
+      apiFetch(`/api/contact-lists/${id}/emails/${emailId}`, { method: 'DELETE' }),
   },
   campaigns: {
     list: () => apiFetch<Campaign[]>('/api/campaigns'),
@@ -118,9 +123,23 @@ export interface ImageRecord {
 }
 
 export interface ContactList {
-  id: string; user_id: string; name: string; neon_table_name: string;
+  id: string; user_id: string; name: string; source_type: 'neon' | 'manual';
+  neon_table_name: string;
   neon_email_column: string; neon_name_column: string; description?: string;
   subscriber_count: number; last_synced_at?: string; created_at: string;
+}
+
+export interface AddEmailsResult {
+  added: number;
+  already_in_list: number;
+  duplicates_in_batch: number;
+  invalid_format: number;
+  no_mail_server: number;
+  subscriber_count: number;
+}
+
+export interface ManualEmail {
+  id: string; email: string; created_at: string;
 }
 
 export interface Campaign {

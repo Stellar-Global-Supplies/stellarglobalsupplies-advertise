@@ -33,7 +33,7 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
   // Get contact list
   const list = await env.DB.prepare('SELECT * FROM contact_lists WHERE id = ?')
     .bind(campaign.contact_list_id).first() as {
-      neon_table_name: string; neon_email_column: string; neon_name_column: string;
+      source_type: string; neon_table_name: string; neon_email_column: string; neon_name_column: string;
     } | null;
 
   if (!list) throw new Error('Contact list not found');
@@ -41,20 +41,28 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
   // Get org-wide unsubscribes
   const unsubs = await env.DB.prepare('SELECT email FROM unsubscribes WHERE org_id = ?')
     .bind(ORG_ID).all();
-  const excludeEmails = (unsubs.results as { email: string }[]).map(r => r.email);
+  const excludeEmails = new Set((unsubs.results as { email: string }[]).map(r => r.email.toLowerCase()));
 
-  const [neonDatabaseUrl, trackPixelBaseUrl] = await Promise.all([
-    env.NEON_DATABASE_URL.get(),
-    env.TRACK_PIXEL_BASE_URL.get(),
-  ]);
+  const trackPixelBaseUrl = await env.TRACK_PIXEL_BASE_URL.get();
 
-  const contacts = await getContactsFromNeon(
-    neonDatabaseUrl,
-    list.neon_table_name,
-    list.neon_email_column,
-    list.neon_name_column,
-    excludeEmails
-  );
+  let contacts: { email: string; name?: string }[];
+  if (list.source_type === 'manual') {
+    const rows = await env.DB.prepare(
+      'SELECT email FROM manual_contacts WHERE contact_list_id = ?'
+    ).bind(campaign.contact_list_id).all();
+    contacts = (rows.results as { email: string }[])
+      .filter(r => !excludeEmails.has(r.email.toLowerCase()))
+      .map(r => ({ email: r.email }));
+  } else {
+    const neonDatabaseUrl = await env.NEON_DATABASE_URL.get();
+    contacts = await getContactsFromNeon(
+      neonDatabaseUrl,
+      list.neon_table_name,
+      list.neon_email_column,
+      list.neon_name_column,
+      Array.from(excludeEmails)
+    );
+  }
 
   await env.DB.prepare("UPDATE campaigns SET total_recipients=?, updated_at=datetime('now') WHERE id=?")
     .bind(contacts.length, campaignId).run();

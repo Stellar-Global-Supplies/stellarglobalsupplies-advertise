@@ -45,6 +45,9 @@ route('GET',    '/api/contact-lists',                   R.listContactLists);
 route('POST',   '/api/contact-lists',                   R.createContactList);
 route('POST',   '/api/contact-lists/:id/sync',          R.syncContactList);
 route('DELETE', '/api/contact-lists/:id',               R.deleteContactList);
+route('POST',   '/api/contact-lists/:id/emails',        R.addManualEmails);
+route('GET',    '/api/contact-lists/:id/emails',        R.listManualEmails);
+route('DELETE', '/api/contact-lists/:id/emails/:emailId', R.deleteManualEmail);
 
 route('GET',    '/api/campaigns',                       R.listCampaigns);
 route('POST',   '/api/campaigns',                       R.createCampaign);

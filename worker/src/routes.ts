@@ -1,6 +1,7 @@
 import { Env } from './types';
 import { requireAuth } from './auth';
 import { countContacts } from './neon';
+import { validateEmailBatch, extractEmailsFromText } from './emailValidation';
 
 const ORG_ID = 'default';
 
@@ -132,30 +133,126 @@ export const listContactLists: Handler = async (req, env) => {
 export const createContactList: Handler = async (req, env) => {
   const user = await requireAuth(req, env).catch(r => { throw r; });
   const body = await req.json() as {
-    name: string; neon_table_name: string;
+    name: string; source_type?: 'neon' | 'manual'; neon_table_name?: string;
     neon_email_column?: string; neon_name_column?: string; description?: string;
   };
-  if (!body.name || !body.neon_table_name) return err('name and neon_table_name required');
+  if (!body.name) return err('name required');
+
+  const sourceType = body.source_type === 'manual' ? 'manual' : 'neon';
+  if (sourceType === 'neon' && !body.neon_table_name) {
+    return err('neon_table_name required for a NeonDB-backed list');
+  }
 
   const id = crypto.randomUUID();
   await env.DB.prepare(`
-    INSERT INTO contact_lists (id, user_id, org_id, name, neon_table_name, neon_email_column, neon_name_column, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, user.id, ORG_ID, body.name, body.neon_table_name,
+    INSERT INTO contact_lists (id, user_id, org_id, name, source_type, neon_table_name, neon_email_column, neon_name_column, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, user.id, ORG_ID, body.name, sourceType,
+    sourceType === 'manual' ? '' : body.neon_table_name!,
     body.neon_email_column || 'email', body.neon_name_column || 'name',
     body.description || null).run();
 
   return json(await env.DB.prepare('SELECT * FROM contact_lists WHERE id = ?').bind(id).first(), 201);
 };
 
+// Add manually-pasted or CSV-derived emails to a manual contact list.
+// Validates format + MX record (free, in-Worker) and silently discards
+// anything invalid, duplicate-in-batch, or already stored for this list.
+export const addManualEmails: Handler = async (req, env, params) => {
+  await requireAuth(req, env).catch(r => { throw r; });
+
+  const list = await env.DB.prepare('SELECT * FROM contact_lists WHERE id = ? AND org_id = ?')
+    .bind(params?.id, ORG_ID).first() as { id: string; source_type: string } | null;
+  if (!list) return err('List not found', 404);
+  if (list.source_type !== 'manual') return err('This list is not a manual list');
+
+  const body = await req.json() as { text?: string; emails?: string[] };
+  const rawEmails = body.emails && body.emails.length > 0
+    ? body.emails
+    : extractEmailsFromText(body.text || '');
+
+  if (rawEmails.length === 0) return err('No emails provided');
+
+  const summary = await validateEmailBatch(rawEmails);
+
+  // Check which of the format/MX-valid emails are already stored for this list
+  let already_in_list = 0;
+  let added = 0;
+  if (summary.valid.length > 0) {
+    const existing = await env.DB.prepare(
+      `SELECT email FROM manual_contacts WHERE contact_list_id = ?`
+    ).bind(list.id).all();
+    const existingSet = new Set((existing.results as { email: string }[]).map(r => r.email));
+
+    const stmt = env.DB.prepare(`
+      INSERT OR IGNORE INTO manual_contacts (id, contact_list_id, org_id, email)
+      VALUES (?, ?, ?, ?)
+    `);
+    const batch = [];
+    for (const email of summary.valid) {
+      if (existingSet.has(email)) { already_in_list++; continue; }
+      batch.push(stmt.bind(crypto.randomUUID(), list.id, ORG_ID, email));
+      added++;
+    }
+    if (batch.length > 0) await env.DB.batch(batch);
+  }
+
+  const count = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM manual_contacts WHERE contact_list_id = ?'
+  ).bind(list.id).first() as { cnt: number };
+
+  await env.DB.prepare(
+    `UPDATE contact_lists SET subscriber_count = ?, last_synced_at = datetime('now') WHERE id = ?`
+  ).bind(count.cnt, list.id).run();
+
+  return json({
+    added,
+    already_in_list,
+    duplicates_in_batch: summary.duplicates_in_batch,
+    invalid_format: summary.invalid_format,
+    no_mail_server: summary.no_mail_server,
+    subscriber_count: count.cnt,
+  });
+};
+
+export const listManualEmails: Handler = async (req, env, params) => {
+  await requireAuth(req, env).catch(r => { throw r; });
+  const rows = await env.DB.prepare(
+    'SELECT id, email, created_at FROM manual_contacts WHERE contact_list_id = ? ORDER BY created_at DESC LIMIT 500'
+  ).bind(params?.id).all();
+  return json(rows.results);
+};
+
+export const deleteManualEmail: Handler = async (req, env, params) => {
+  await requireAuth(req, env).catch(r => { throw r; });
+  await env.DB.prepare('DELETE FROM manual_contacts WHERE id = ? AND contact_list_id = ?')
+    .bind(params?.emailId, params?.id).run();
+  const count = await env.DB.prepare(
+    'SELECT COUNT(*) as cnt FROM manual_contacts WHERE contact_list_id = ?'
+  ).bind(params?.id).first() as { cnt: number };
+  await env.DB.prepare('UPDATE contact_lists SET subscriber_count = ? WHERE id = ?')
+    .bind(count.cnt, params?.id).run();
+  return json({ success: true });
+};
+
 export const syncContactList: Handler = async (req, env, params) => {
   await requireAuth(req, env).catch(r => { throw r; });
   const list = await env.DB.prepare('SELECT * FROM contact_lists WHERE id = ? AND org_id = ?')
-    .bind(params?.id, ORG_ID).first() as { neon_table_name: string; neon_email_column: string } | null;
+    .bind(params?.id, ORG_ID).first() as
+    { id: string; source_type: string; neon_table_name: string; neon_email_column: string } | null;
   if (!list) return err('List not found', 404);
 
-  const neonDatabaseUrl = await env.NEON_DATABASE_URL.get();
-  const count = await countContacts(neonDatabaseUrl, list.neon_table_name, list.neon_email_column);
+  let count: number;
+  if (list.source_type === 'manual') {
+    const row = await env.DB.prepare(
+      'SELECT COUNT(*) as cnt FROM manual_contacts WHERE contact_list_id = ?'
+    ).bind(list.id).first() as { cnt: number };
+    count = row.cnt;
+  } else {
+    const neonDatabaseUrl = await env.NEON_DATABASE_URL.get();
+    count = await countContacts(neonDatabaseUrl, list.neon_table_name, list.neon_email_column);
+  }
+
   await env.DB.prepare(`
     UPDATE contact_lists SET subscriber_count = ?, last_synced_at = datetime('now') WHERE id = ?
   `).bind(count, params?.id).run();
