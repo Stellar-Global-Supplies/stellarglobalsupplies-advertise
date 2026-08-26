@@ -193,3 +193,28 @@ CREATE INDEX IF NOT EXISTS idx_unsubscribes_org  ON unsubscribes(org_id);
 -- ================================================================
 ALTER TABLE templates ADD COLUMN product_name TEXT;
 ALTER TABLE templates ADD COLUMN product_image_url TEXT;
+
+-- ================================================================
+-- Migration: Manual contact lists (emails stored directly in D1)
+-- Run: wrangler d1 execute adplatform-db --file=schema.sql
+-- (safe to re-run — uses IF NOT EXISTS / column-add guards)
+-- ================================================================
+
+-- 'neon'  -> existing behavior, contacts pulled live from a NeonDB table
+-- 'manual'-> contacts stored directly in manual_contacts below
+ALTER TABLE contact_lists ADD COLUMN source_type TEXT DEFAULT 'neon';
+
+-- Allow neon_table_name to be unused for manual lists
+-- (SQLite ALTER TABLE can't drop NOT NULL, so this is enforced only at the app layer)
+
+CREATE TABLE IF NOT EXISTS manual_contacts (
+  id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  contact_list_id TEXT NOT NULL REFERENCES contact_lists(id) ON DELETE CASCADE,
+  org_id TEXT NOT NULL DEFAULT 'default',
+  email TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(contact_list_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_manual_contacts_list ON manual_contacts(contact_list_id);
+CREATE INDEX IF NOT EXISTS idx_manual_contacts_org  ON manual_contacts(org_id);
