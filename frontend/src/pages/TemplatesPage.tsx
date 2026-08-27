@@ -70,7 +70,7 @@ const STARTER_TEMPLATE = `<!DOCTYPE html>
   <!-- GREETING -->
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-bottom:1px solid #edf0f4">
     <tr><td class="pad" style="padding:28px 32px">
-      <p style="font-family:'Inter',Arial,sans-serif;color:#374151;font-size:15px;line-height:1.7">Dear <strong>{{name}}</strong>, we're excited to share our featured product this month — quality-verified and ready for your next order. Reach out for a custom quote within 24 hours.</p>
+      <p style="font-family:'Inter',Arial,sans-serif;color:#374151;font-size:15px;line-height:1.7">Hi, we're excited to share our featured product this month — quality-verified and ready for your next order. Reach out for a custom quote within 24 hours.</p>
     </td></tr>
   </table>
 
@@ -334,8 +334,8 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-6 max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Templates</h1>
           <p className="text-slate-500 text-sm mt-1">HTML email templates with merge tags</p>
