@@ -45,7 +45,7 @@ export default function CampaignAnalyticsPage() {
   });
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-6xl">
       <div className="flex items-center gap-3">
         <Link to="/analytics" className="text-slate-400 hover:text-slate-600"><ChevronLeft size={20} /></Link>
         <div>
