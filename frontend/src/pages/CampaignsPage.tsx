@@ -43,8 +43,8 @@ export default function CampaignsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-6 max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Campaigns</h1>
           <p className="text-slate-500 text-sm mt-1">Create and send email campaigns</p>
@@ -67,8 +67,8 @@ export default function CampaignsPage() {
           </Link>
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm min-w-[760px]">
             <thead className="bg-slate-50 border-b">
               <tr>
                 <th className="text-left p-4 font-medium text-slate-500">Campaign</th>
