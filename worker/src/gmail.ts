@@ -35,6 +35,7 @@ function encodeBase64Url(str: string): string {
 }
 
 export interface SendEmailParams {
+  accessToken: string; // reused across a whole send batch, not fetched per-email
   config: GmailConfig;
   to: string;
   toName?: string;
@@ -45,8 +46,6 @@ export interface SendEmailParams {
 }
 
 export async function sendEmail(params: SendEmailParams): Promise<string> {
-  const accessToken = await getAccessToken(params.config);
-
   const from = params.config.fromName
     ? `${params.config.fromName} <${params.config.senderEmail}>`
     : params.config.senderEmail;
@@ -69,7 +68,7 @@ export async function sendEmail(params: SendEmailParams): Promise<string> {
   const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${params.accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ raw: encodedEmail }),

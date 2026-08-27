@@ -34,7 +34,7 @@ export default function AnalyticsPage() {
   })) ?? [];
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-6xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
         <p className="text-slate-500 text-sm mt-1">Campaign performance across all time</p>
@@ -113,7 +113,8 @@ export default function AnalyticsPage() {
           <div className="p-5 border-b">
             <h2 className="font-semibold text-slate-900">All Campaigns</h2>
           </div>
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-slate-50 border-b">
               <tr>
                 {['Campaign','Sent','Opens','Clicks','Unsubs','Open %','Click %',''].map(h => (
@@ -147,6 +148,7 @@ export default function AnalyticsPage() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
