@@ -199,7 +199,7 @@ export default {
 
   // Cron: send scheduled campaigns, and resume any mid-send campaign whose
   // last invocation got cut off (e.g. hit the Worker subrequest ceiling).
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const due = await env.DB.prepare(`
       SELECT id FROM campaigns
       WHERE status = 'scheduled' AND scheduled_at <= datetime('now')
@@ -231,26 +231,5 @@ export default {
       );
     }
 
-    // Resume in-progress campaigns one chunk at a time. Limited to a
-    // handful per tick to keep each cron invocation's own resource usage low.
-    // Only pick up campaigns whose last update is >20s old, so we don't grab
-    // one that's still being actively worked by another invocation right now
-    // (e.g. the manual "Send" click that's mid-chunk) and double-send.
-    const inProgress = await env.DB.prepare(`
-      SELECT id FROM campaigns
-      WHERE status = 'sending' AND updated_at <= datetime('now', '-20 seconds')
-      LIMIT 3
-    `).all();
-
-    for (const row of inProgress.results as { id: string }[]) {
-      ctx.waitUntil(
-        sendCampaign(row.id, env).catch(async (err) => {
-          console.error('sendCampaign resume failed:', err);
-          await env.DB.prepare(
-            "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
-          ).bind(row.id).run().catch(() => {});
-        })
-      );
-    }
   },
 } satisfies ExportedHandler<Env>;
