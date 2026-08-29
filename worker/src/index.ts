@@ -84,7 +84,7 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
   // without this the worker dies as soon as the 202 response is returned,
   // which is why campaigns were getting stuck in "sending" / falling back to draft.
   ctx.waitUntil(
-    sendCampaign(params.id, env).catch(async (err) => {
+    sendCampaign(params.id, env, ctx).catch(async (err) => {
       console.error('sendCampaign failed:', err);
       // Mark as failed so the UI shows the real state instead of hanging on "sending"
       await env.DB.prepare(
@@ -150,15 +150,20 @@ export default {
         ).bind(sendId).first() as { recipient_email: string; campaign_id: string; user_id: string } | null;
 
         if (send) {
-          await env.DB.prepare(`
+          const unsubResult = await env.DB.prepare(`
             INSERT OR IGNORE INTO unsubscribes (id, user_id, org_id, email, campaign_id)
             VALUES (?, ?, 'default', ?, ?)
           `).bind(crypto.randomUUID(), send.user_id, send.recipient_email, send.campaign_id).run();
 
-          await env.DB.prepare(`
-            INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
-            VALUES (?, ?, ?, ?, 'unsubscribe')
-          `).bind(crypto.randomUUID(), send.campaign_id, sendId, send.recipient_email).run();
+          // Only log an unsubscribe event the first time — INSERT OR IGNORE means
+          // repeat visits to this link (reloads, link scanners, double-clicks)
+          // won't inflate the unsubscribe count in analytics.
+          if (unsubResult.meta.changes > 0) {
+            await env.DB.prepare(`
+              INSERT INTO email_events (id, campaign_id, send_id, recipient_email, event_type)
+              VALUES (?, ?, ?, ?, 'unsubscribe')
+            `).bind(crypto.randomUUID(), send.campaign_id, sendId, send.recipient_email).run();
+          }
         }
       }
 
@@ -192,15 +197,38 @@ export default {
     });
   },
 
-  // Cron: send scheduled campaigns
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  // Cron: send scheduled campaigns, and resume any mid-send campaign whose
+  // last invocation got cut off (e.g. hit the Worker subrequest ceiling).
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const due = await env.DB.prepare(`
       SELECT id FROM campaigns
       WHERE status = 'scheduled' AND scheduled_at <= datetime('now')
     `).all();
 
     for (const row of due.results as { id: string }[]) {
-      ctx.waitUntil(sendCampaign(row.id, env).catch(console.error));
+      ctx.waitUntil(sendCampaign(row.id, env, ctx).catch(console.error));
+    }
+
+    // Resume in-progress campaigns one chunk at a time. Limited to a
+    // handful per tick to keep each cron invocation's own resource usage low.
+    // Only pick up campaigns whose last update is >20s old, so we don't grab
+    // one that's still being actively worked by another invocation right now
+    // (e.g. the manual "Send" click that's mid-chunk) and double-send.
+    const inProgress = await env.DB.prepare(`
+      SELECT id FROM campaigns
+      WHERE status = 'sending' AND updated_at <= datetime('now', '-20 seconds')
+      LIMIT 3
+    `).all();
+
+    for (const row of inProgress.results as { id: string }[]) {
+      ctx.waitUntil(
+        sendCampaign(row.id, env, ctx).catch(async (err) => {
+          console.error('sendCampaign resume failed:', err);
+          await env.DB.prepare(
+            "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
+          ).bind(row.id).run().catch(() => {});
+        })
+      );
     }
   },
 } satisfies ExportedHandler<Env>;
