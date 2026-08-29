@@ -84,7 +84,7 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
   // without this the worker dies as soon as the 202 response is returned,
   // which is why campaigns were getting stuck in "sending" / falling back to draft.
   ctx.waitUntil(
-    sendCampaign(params.id, env).catch(async (err) => {
+    sendCampaign(params.id, env, ctx).catch(async (err) => {
       console.error('sendCampaign failed:', err);
       // Mark as failed so the UI shows the real state instead of hanging on "sending"
       await env.DB.prepare(
@@ -199,14 +199,14 @@ export default {
 
   // Cron: send scheduled campaigns, and resume any mid-send campaign whose
   // last invocation got cut off (e.g. hit the Worker subrequest ceiling).
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const due = await env.DB.prepare(`
       SELECT id FROM campaigns
       WHERE status = 'scheduled' AND scheduled_at <= datetime('now')
     `).all();
 
     for (const row of due.results as { id: string }[]) {
-      ctx.waitUntil(sendCampaign(row.id, env).catch(console.error));
+      ctx.waitUntil(sendCampaign(row.id, env, ctx).catch(console.error));
     }
 
     // Resume in-progress campaigns one chunk at a time. Limited to a
@@ -222,7 +222,7 @@ export default {
 
     for (const row of inProgress.results as { id: string }[]) {
       ctx.waitUntil(
-        sendCampaign(row.id, env).catch(async (err) => {
+        sendCampaign(row.id, env, ctx).catch(async (err) => {
           console.error('sendCampaign resume failed:', err);
           await env.DB.prepare(
             "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
@@ -230,5 +230,6 @@ export default {
         })
       );
     }
+
   },
 } satisfies ExportedHandler<Env>;
