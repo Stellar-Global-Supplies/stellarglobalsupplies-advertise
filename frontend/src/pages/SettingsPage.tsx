@@ -49,7 +49,7 @@ export default function SettingsPage() {
   );
 
   return (
-    <div className="p-8 space-y-8 max-w-2xl">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
         <p className="text-slate-500 text-sm mt-1">Configure your account and Gmail sending credentials</p>

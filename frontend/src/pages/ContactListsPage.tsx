@@ -204,8 +204,8 @@ export default function ContactListsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 space-y-5 md:space-y-6 max-w-4xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Contact Lists</h1>
           <p className="text-slate-500 text-sm mt-1">Sourced from NeonDB or added manually</p>
@@ -230,7 +230,7 @@ export default function ContactListsPage() {
       ) : (
         <div className="card divide-y">
           {lists.map(list => (
-            <div key={list.id} className="p-5 flex items-center gap-4">
+            <div key={list.id} className="p-5 flex flex-wrap sm:flex-nowrap items-center gap-4">
               <div className="w-10 h-10 bg-brand-50 rounded-lg flex items-center justify-center shrink-0">
                 <Users size={18} className="text-brand-500" />
               </div>

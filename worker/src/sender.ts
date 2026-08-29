@@ -22,7 +22,7 @@ interface CampaignRow {
   status: string; total_recipients: number; product_name?: string; product_image_url?: string;
 }
 
-export async function sendCampaign(campaignId: string, env: Env, ctx?: ExecutionContext): Promise<void> {
+export async function sendCampaign(campaignId: string, env: Env): Promise<void> {
   const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ?')
     .bind(campaignId).first() as CampaignRow | null;
 
@@ -190,22 +190,18 @@ export async function sendCampaign(campaignId: string, env: Env, ctx?: Execution
         UPDATE campaign_sends SET status='failed', error_message=? WHERE id=?
       `).bind(msg, sendId).run();
     }
+    return;
   }
 
   // Touch updated_at so we can tell this invocation made progress (used by
   // ops/debugging to distinguish "actively progressing" from "truly stuck").
   await env.DB.prepare("UPDATE campaigns SET updated_at=datetime('now') WHERE id=?").bind(campaignId).run();
 
-  // If more contacts remain after this chunk, schedule the next chunk
-  // immediately via ctx.waitUntil — no cron needed. The next call picks up
-  // exactly where this one left off because "remaining" is always recomputed
-  // fresh from campaign_sends at the top of sendCampaign.
-  if (remaining.length > chunk.length) {
-    if (ctx) {
-      ctx.waitUntil(sendCampaign(campaignId, env, ctx));
-    }
-    return;
-  }
+  // If more contacts remain after this chunk, leave status='sending' —
+  // the cron tick in index.ts's scheduled() handler will call sendCampaign
+  // again and this function will pick up exactly where it left off, since
+  // "remaining" is always computed fresh from campaign_sends.
+  if (remaining.length > chunk.length) return;
 
   // This was the last chunk — finalize immediately rather than waiting for
   // the next cron tick.

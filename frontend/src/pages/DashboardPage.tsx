@@ -53,8 +53,8 @@ export default function DashboardPage() {
   const clickRate = o?.total_sent ? ((o.total_clicks / o.total_sent) * 100).toFixed(1) : '0.0';
 
   return (
-    <div className="p-8 space-y-8 max-w-6xl">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-slate-500 text-sm mt-1">Campaign performance overview</p>
@@ -107,30 +107,32 @@ export default function DashboardPage() {
             <p>No campaigns yet. <Link to="/campaigns/new" className="text-brand-600 hover:underline">Create your first one.</Link></p>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="border-b bg-slate-50">
-              <tr>
-                <th className="text-left p-4 text-slate-500 font-medium">Name</th>
-                <th className="text-left p-4 text-slate-500 font-medium">Status</th>
-                <th className="text-right p-4 text-slate-500 font-medium">Sent</th>
-                <th className="text-right p-4 text-slate-500 font-medium">Opens</th>
-                <th className="p-4"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map(c => (
-                <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="p-4 font-medium text-slate-900">{c.name}</td>
-                  <td className="p-4">{statusBadge(c.status)}</td>
-                  <td className="p-4 text-right text-slate-600">{c.sent_count.toLocaleString()}</td>
-                  <td className="p-4 text-right text-slate-600">—</td>
-                  <td className="p-4 text-right">
-                    <Link to={`/analytics/${c.id}`} className="text-brand-600 hover:underline text-xs">Report</Link>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
+              <thead className="border-b bg-slate-50">
+                <tr>
+                  <th className="text-left p-4 text-slate-500 font-medium">Name</th>
+                  <th className="text-left p-4 text-slate-500 font-medium">Status</th>
+                  <th className="text-right p-4 text-slate-500 font-medium">Sent</th>
+                  <th className="text-right p-4 text-slate-500 font-medium">Opens</th>
+                  <th className="p-4"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {campaigns.map(c => (
+                  <tr key={c.id} className="border-b last:border-0 hover:bg-slate-50">
+                    <td className="p-4 font-medium text-slate-900">{c.name}</td>
+                    <td className="p-4">{statusBadge(c.status)}</td>
+                    <td className="p-4 text-right text-slate-600">{c.sent_count.toLocaleString()}</td>
+                    <td className="p-4 text-right text-slate-600">—</td>
+                    <td className="p-4 text-right">
+                      <Link to={`/analytics/${c.id}`} className="text-brand-600 hover:underline text-xs">Report</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
