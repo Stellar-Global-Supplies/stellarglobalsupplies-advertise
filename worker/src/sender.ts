@@ -22,7 +22,7 @@ interface CampaignRow {
   status: string; total_recipients: number; product_name?: string; product_image_url?: string;
 }
 
-export async function sendCampaign(campaignId: string, env: Env): Promise<void> {
+export async function sendCampaign(campaignId: string, env: Env, ctx?: ExecutionContext): Promise<void> {
   const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ?')
     .bind(campaignId).first() as CampaignRow | null;
 
@@ -201,7 +201,12 @@ export async function sendCampaign(campaignId: string, env: Env): Promise<void> 
   // the cron tick in index.ts's scheduled() handler will call sendCampaign
   // again and this function will pick up exactly where it left off, since
   // "remaining" is always computed fresh from campaign_sends.
-  if (remaining.length > chunk.length) return;
+  if (remaining.length > chunk.length) {
+    if (ctx) {
+      ctx.waitUntil(sendCampaign(campaignId, env, ctx));
+    }
+    return;
+  }
 
   // This was the last chunk — finalize immediately rather than waiting for
   // the next cron tick.
