@@ -200,10 +200,12 @@ export async function sendCampaign(campaignId: string, env: Env, ctx?: Execution
   // the cron tick in index.ts's scheduled() handler will call sendCampaign
   // again and this function will pick up exactly where it left off, since
   // "remaining" is always computed fresh from campaign_sends.
+  // If more contacts remain, process the next chunk sequentially (not in
+  // parallel via waitUntil) — this prevents a race where two chunks run at
+  // the same time, both read the same incomplete campaign_sends, and neither
+  // ever reaches the finalize block, leaving status stuck on 'sending'.
   if (remaining.length > chunk.length) {
-    if (ctx) {
-      ctx.waitUntil(sendCampaign(campaignId, env, ctx));
-    }
+    await sendCampaign(campaignId, env, ctx);
     return;
   }
 
