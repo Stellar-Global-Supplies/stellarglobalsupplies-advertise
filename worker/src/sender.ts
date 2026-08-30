@@ -190,7 +190,6 @@ export async function sendCampaign(campaignId: string, env: Env, ctx?: Execution
         UPDATE campaign_sends SET status='failed', error_message=? WHERE id=?
       `).bind(msg, sendId).run();
     }
-    return;
   }
 
   // Touch updated_at so we can tell this invocation made progress (used by
