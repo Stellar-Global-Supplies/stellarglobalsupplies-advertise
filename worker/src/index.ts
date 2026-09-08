@@ -99,13 +99,11 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
     // else: fall through and resume below
   }
 
-  const selfBaseUrl = new URL(req.url).origin;
-
   // ctx.waitUntil keeps the worker alive until sendCampaign fully resolves —
   // without this the worker dies as soon as the 202 response is returned,
   // which is why campaigns were getting stuck in "sending" / falling back to draft.
   ctx.waitUntil(
-    sendCampaign(params.id, env, ctx, selfBaseUrl).catch(async (err) => {
+    sendCampaign(params.id, env, ctx).catch(async (err) => {
       console.error('sendCampaign failed:', err);
       // Mark as failed so the UI shows the real state instead of hanging on "sending"
       await env.DB.prepare(
@@ -119,11 +117,13 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
   });
 });
 
-// ── Internal: continue sending the next chunk (self-chained by sender.ts) ───
+// ── Internal: continue sending the next chunk (self-chained by sender.ts via
+// a service binding — see types.ts and sender.ts for why a service binding
+// is used instead of a raw fetch()) ─────────────────────────────────────────
 // Not user-facing — authenticated via a shared secret header instead of
 // requireAuth, since there's no logged-in user in this request. This is what
 // lets a campaign of any size complete without a cron trigger: each chunk's
-// invocation fires this to hand off to a fresh invocation for the next chunk.
+// invocation hands off to a fresh invocation for the next chunk.
 route('POST', '/internal/campaigns/:id/continue', async (req, env, params, ctx) => {
   const expected = await env.INTERNAL_CHAIN_SECRET.get();
   const provided = req.headers.get('X-Internal-Secret');
@@ -133,10 +133,8 @@ route('POST', '/internal/campaigns/:id/continue', async (req, env, params, ctx) 
     });
   }
 
-  const selfBaseUrl = new URL(req.url).origin;
-
   ctx.waitUntil(
-    sendCampaign(params.id, env, ctx, selfBaseUrl).catch(async (err) => {
+    sendCampaign(params.id, env, ctx).catch(async (err) => {
       console.error('sendCampaign continuation failed:', err);
       await env.DB.prepare(
         "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
