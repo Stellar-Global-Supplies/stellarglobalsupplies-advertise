@@ -217,11 +217,10 @@ export async function sendCampaign(
   if (remaining.length > chunk.length) {
     if (selfBaseUrl) {
       const continueUrl = `${selfBaseUrl}/internal/campaigns/${campaignId}/continue`;
+      console.log(`sendCampaign chunk done for ${campaignId}, ${remaining.length - chunk.length} remaining, self-chaining to ${continueUrl}`);
       const secret = await env.INTERNAL_CHAIN_SECRET.get();
       const doContinue = async () => {
-        // A couple of retries here because this fetch call itself counts
-        // against *this* invocation's subrequest budget, and we'd rather
-        // retry a flaky self-call than silently drop the chain.
+        let lastError: string = '';
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             const res = await fetch(continueUrl, {
@@ -229,20 +228,24 @@ export async function sendCampaign(
               headers: { 'X-Internal-Secret': secret },
             });
             if (res.ok) return;
-          } catch {
-            // fall through to retry
+            lastError = `HTTP ${res.status} from ${continueUrl}: ${await res.text().catch(() => '')}`;
+          } catch (e) {
+            lastError = `fetch to ${continueUrl} threw: ${e instanceof Error ? e.message : String(e)}`;
           }
         }
-        // All retries failed — leave status='sending'. It's not permanently
-        // stuck: the /send endpoint's stall-detection (index.ts) lets it be
-        // manually resumed once updated_at goes stale, and the UI surfaces
-        // a "Resume sending" action in that case.
+        // All retries failed — log loudly. Previously this was swallowed
+        // silently, which is why campaigns could stall with nothing in the
+        // logs. Status stays 'sending'; it's resumable via the /send
+        // endpoint's stall-detection once updated_at goes stale.
+        console.error(`sendCampaign self-chain failed for campaign ${campaignId}: ${lastError}`);
       };
       if (ctx) {
         ctx.waitUntil(doContinue());
       } else {
         await doContinue();
       }
+    } else {
+      console.error(`sendCampaign: no selfBaseUrl provided for ${campaignId} — cannot self-chain, campaign will stall at 'sending' until manually resumed via /send`);
     }
     // Whether or not we could self-chain, this invocation is done — return
     // now instead of looping in-process.
