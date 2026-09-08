@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { requireAuth } from './auth';
-import { sendCampaign } from './sender';
+import { sendCampaign, STALL_THRESHOLD_SECONDS } from './sender';
 import * as R from './routes';
 
 const CORS_HEADERS = {
@@ -67,24 +67,45 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
 
   const campaign = await env.DB.prepare(
     "SELECT * FROM campaigns WHERE id = ? AND org_id = 'default'"
-  ).bind(params.id).first() as { status: string } | null;
+  ).bind(params.id).first() as { status: string; updated_at: string } | null;
 
   if (!campaign) {
     return new Response(JSON.stringify({ error: 'Campaign not found' }), {
       status: 404, headers: { 'Content-Type': 'application/json' },
     });
   }
-  if (campaign.status === 'sending' || campaign.status === 'sent') {
-    return new Response(JSON.stringify({ error: 'Already sent or sending' }), {
+
+  if (campaign.status === 'sent') {
+    return new Response(JSON.stringify({ error: 'Already sent' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     });
   }
+
+  if (campaign.status === 'sending') {
+    // Only block if it looks actively in-progress. If updated_at is stale
+    // (no chunk has completed recently — e.g. the self-chain fetch failed
+    // and exhausted its retries), treat this as a manual resume instead of
+    // rejecting it. sendCampaign always recomputes "remaining" fresh from
+    // campaign_sends, so resuming is always safe and never double-sends.
+    const stale = await env.DB.prepare(
+      `SELECT (julianday('now') - julianday(updated_at)) * 86400 > ? as is_stale FROM campaigns WHERE id = ?`
+    ).bind(STALL_THRESHOLD_SECONDS, params.id).first() as { is_stale: number } | null;
+
+    if (!stale?.is_stale) {
+      return new Response(JSON.stringify({ error: 'Already sending' }), {
+        status: 400, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    // else: fall through and resume below
+  }
+
+  const selfBaseUrl = new URL(req.url).origin;
 
   // ctx.waitUntil keeps the worker alive until sendCampaign fully resolves —
   // without this the worker dies as soon as the 202 response is returned,
   // which is why campaigns were getting stuck in "sending" / falling back to draft.
   ctx.waitUntil(
-    sendCampaign(params.id, env, ctx).catch(async (err) => {
+    sendCampaign(params.id, env, ctx, selfBaseUrl).catch(async (err) => {
       console.error('sendCampaign failed:', err);
       // Mark as failed so the UI shows the real state instead of hanging on "sending"
       await env.DB.prepare(
@@ -94,6 +115,36 @@ route('POST', '/api/campaigns/:id/send', async (req, env, params, ctx) => {
   );
 
   return new Response(JSON.stringify({ message: 'Campaign sending started' }), {
+    status: 202, headers: { 'Content-Type': 'application/json' },
+  });
+});
+
+// ── Internal: continue sending the next chunk (self-chained by sender.ts) ───
+// Not user-facing — authenticated via a shared secret header instead of
+// requireAuth, since there's no logged-in user in this request. This is what
+// lets a campaign of any size complete without a cron trigger: each chunk's
+// invocation fires this to hand off to a fresh invocation for the next chunk.
+route('POST', '/internal/campaigns/:id/continue', async (req, env, params, ctx) => {
+  const expected = await env.INTERNAL_CHAIN_SECRET.get();
+  const provided = req.headers.get('X-Internal-Secret');
+  if (!provided || provided !== expected) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const selfBaseUrl = new URL(req.url).origin;
+
+  ctx.waitUntil(
+    sendCampaign(params.id, env, ctx, selfBaseUrl).catch(async (err) => {
+      console.error('sendCampaign continuation failed:', err);
+      await env.DB.prepare(
+        "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
+      ).bind(params.id).run().catch(() => {});
+    })
+  );
+
+  return new Response(JSON.stringify({ message: 'Continuing' }), {
     status: 202, headers: { 'Content-Type': 'application/json' },
   });
 });
@@ -197,39 +248,11 @@ export default {
     });
   },
 
-  // Cron: send scheduled campaigns, and resume any mid-send campaign whose
-  // last invocation got cut off (e.g. hit the Worker subrequest ceiling).
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const due = await env.DB.prepare(`
-      SELECT id FROM campaigns
-      WHERE status = 'scheduled' AND scheduled_at <= datetime('now')
-    `).all();
-
-    for (const row of due.results as { id: string }[]) {
-      ctx.waitUntil(sendCampaign(row.id, env, ctx).catch(console.error));
-    }
-
-    // Resume in-progress campaigns one chunk at a time. Limited to a
-    // handful per tick to keep each cron invocation's own resource usage low.
-    // Only pick up campaigns whose last update is >20s old, so we don't grab
-    // one that's still being actively worked by another invocation right now
-    // (e.g. the manual "Send" click that's mid-chunk) and double-send.
-    const inProgress = await env.DB.prepare(`
-      SELECT id FROM campaigns
-      WHERE status = 'sending' AND updated_at <= datetime('now', '-20 seconds')
-      LIMIT 3
-    `).all();
-
-    for (const row of inProgress.results as { id: string }[]) {
-      ctx.waitUntil(
-        sendCampaign(row.id, env, ctx).catch(async (err) => {
-          console.error('sendCampaign resume failed:', err);
-          await env.DB.prepare(
-            "UPDATE campaigns SET status='failed', updated_at=datetime('now') WHERE id=?"
-          ).bind(row.id).run().catch(() => {});
-        })
-      );
-    }
-
-  },
+  // NOTE: No cron trigger is configured for this worker (by design — see
+  // /internal/campaigns/:id/continue above, which handles resuming
+  // in-progress sends via self-chained fetches instead of polling). If a
+  // "scheduled send at a future date" feature is added later, that flow
+  // needs its own trigger (e.g. a Durable Object alarm or a user-initiated
+  // check), since Workers won't run scheduled() without a cron trigger
+  // registered in wrangler.toml.
 } satisfies ExportedHandler<Env>;
