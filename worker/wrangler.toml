@@ -49,3 +49,15 @@ secret_name = "ADMIN_NEON_DB_URL"
 binding = "TRACK_PIXEL_BASE_URL"
 store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
 secret_name = "TRACK_PIXEL_BASE_URL"
+
+# Shared secret for the self-chained "continue sending" call the worker
+# makes to itself (see worker/src/sender.ts + /internal/campaigns/:id/continue
+# in worker/src/index.ts). This replaces the old cron-based resume — no
+# scheduler needed. Generate any random string, e.g.:
+#   openssl rand -hex 32
+# then:
+#   wrangler secrets-store secret create INTERNAL_CHAIN_SECRET --store-id 2556bcd9458349f6b4ff2a3fc93bdba1 --value "PASTE_RANDOM_STRING_HERE"
+[[secrets_store_secrets]]
+binding = "INTERNAL_CHAIN_SECRET"
+store_id = "2556bcd9458349f6b4ff2a3fc93bdba1"
+secret_name = "JWT_SECRET"
