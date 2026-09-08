@@ -10,6 +10,11 @@ export interface Env {
   SUPABASE_ANON_KEY:    SecretsStoreSecret;
   NEON_DATABASE_URL:    SecretsStoreSecret;
   TRACK_PIXEL_BASE_URL: SecretsStoreSecret;
+
+  // Shared secret used to authenticate the worker's self-chained "continue
+  // sending" requests (see sender.ts). Not a user-facing secret — just stops
+  // randoms from hitting /internal/* and kicking off sends.
+  INTERNAL_CHAIN_SECRET: SecretsStoreSecret;
 }
 
 // Cloudflare Secrets Store secret shape
