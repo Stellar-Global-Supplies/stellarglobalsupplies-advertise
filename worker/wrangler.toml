@@ -12,6 +12,19 @@ binding = "DB"
 database_name = "adplatform-db"
 database_id = "e7887010-4a18-472b-8167-fc60e53fea5e"   # replace after: wrangler d1 create adplatform-db
 
+# Service binding to itself — required so the worker can hand off to the next
+# recipient chunk (see /internal/campaigns/:id/continue in src/index.ts and
+# the self-chain logic in src/sender.ts) WITHOUT a raw fetch() back to its
+# own public URL. A plain fetch() to your own hostname is blocked by
+# Cloudflare with error 1042 ("request appears to be part of an infinite
+# loop"), even for a single hop. A service binding calls the same script
+# directly through the Workers runtime instead, so it isn't treated as a
+# public request and never trips that protection. "service" must match the
+# `name` field at the top of this file.
+[[services]]
+binding = "SELF"
+service = "adplatform-worker"
+
 [vars]
 SUPABASE_URL = "https://hwljdlgoysqaujzcnpeu.supabase.co"
 FRONTEND_URL = "https://advertise.stellarglobalsupplies.com"
