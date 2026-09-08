@@ -33,8 +33,7 @@ interface CampaignRow {
 export async function sendCampaign(
   campaignId: string,
   env: Env,
-  ctx?: ExecutionContext,
-  selfBaseUrl?: string
+  ctx?: ExecutionContext
 ): Promise<void> {
   const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ?')
     .bind(campaignId).first() as CampaignRow | null;
@@ -210,45 +209,44 @@ export async function sendCampaign(
   await env.DB.prepare("UPDATE campaigns SET updated_at=datetime('now') WHERE id=?").bind(campaignId).run();
 
   // If more contacts remain after this chunk, leave status='sending' and
-  // self-chain: fire an async request back to this same worker to process
-  // the next chunk in a fresh invocation. We deliberately do NOT recurse
-  // in-process here — that was the bug. A fresh HTTP-triggered invocation
-  // gets its own subrequest/CPU budget, so this scales to any list size.
+  // self-chain: hand off to the same worker (via a service binding, NOT a
+  // raw fetch — see types.ts for why) to process the next chunk in a fresh
+  // invocation. We deliberately do NOT recurse in-process here — that was
+  // the original bug. A fresh invocation gets its own subrequest/CPU
+  // budget, so this scales to any list size.
   if (remaining.length > chunk.length) {
-    if (selfBaseUrl) {
-      const continueUrl = `${selfBaseUrl}/internal/campaigns/${campaignId}/continue`;
-      console.log(`sendCampaign chunk done for ${campaignId}, ${remaining.length - chunk.length} remaining, self-chaining to ${continueUrl}`);
-      const secret = await env.INTERNAL_CHAIN_SECRET.get();
-      const doContinue = async () => {
-        let lastError: string = '';
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const res = await fetch(continueUrl, {
-              method: 'POST',
-              headers: { 'X-Internal-Secret': secret },
-            });
-            if (res.ok) return;
-            lastError = `HTTP ${res.status} from ${continueUrl}: ${await res.text().catch(() => '')}`;
-          } catch (e) {
-            lastError = `fetch to ${continueUrl} threw: ${e instanceof Error ? e.message : String(e)}`;
-          }
+    const continuePath = `/internal/campaigns/${campaignId}/continue`;
+    console.log(`sendCampaign chunk done for ${campaignId}, ${remaining.length - chunk.length} remaining, self-chaining via service binding to ${continuePath}`);
+    const secret = await env.INTERNAL_CHAIN_SECRET.get();
+    const doContinue = async () => {
+      let lastError: string = '';
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          // The hostname here is a placeholder — service bindings route by
+          // the binding itself, not DNS, so this never leaves the runtime
+          // and never trips Cloudflare's self-fetch loop protection (error
+          // 1042) the way a plain global fetch() to our own public URL did.
+          const res = await env.SELF.fetch(`https://internal${continuePath}`, {
+            method: 'POST',
+            headers: { 'X-Internal-Secret': secret },
+          });
+          if (res.ok) return;
+          lastError = `HTTP ${res.status} from ${continuePath}: ${await res.text().catch(() => '')}`;
+        } catch (e) {
+          lastError = `service-binding call to ${continuePath} threw: ${e instanceof Error ? e.message : String(e)}`;
         }
-        // All retries failed — log loudly. Previously this was swallowed
-        // silently, which is why campaigns could stall with nothing in the
-        // logs. Status stays 'sending'; it's resumable via the /send
-        // endpoint's stall-detection once updated_at goes stale.
-        console.error(`sendCampaign self-chain failed for campaign ${campaignId}: ${lastError}`);
-      };
-      if (ctx) {
-        ctx.waitUntil(doContinue());
-      } else {
-        await doContinue();
       }
+      // All retries failed — log loudly. Status stays 'sending'; it's
+      // resumable via the /send endpoint's stall-detection once
+      // updated_at goes stale.
+      console.error(`sendCampaign self-chain failed for campaign ${campaignId}: ${lastError}`);
+    };
+    if (ctx) {
+      ctx.waitUntil(doContinue());
     } else {
-      console.error(`sendCampaign: no selfBaseUrl provided for ${campaignId} — cannot self-chain, campaign will stall at 'sending' until manually resumed via /send`);
+      await doContinue();
     }
-    // Whether or not we could self-chain, this invocation is done — return
-    // now instead of looping in-process.
+    // This invocation is done — return now instead of looping in-process.
     return;
   }
 
