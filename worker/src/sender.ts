@@ -5,16 +5,24 @@ import { sendEmail, injectTracking, getAccessToken } from './gmail';
 const ORG_ID = 'default';
 
 // Cloudflare Workers cap how many outbound calls (subrequests) a single
-// invocation can make (as low as 50 external calls on the Free plan). A big
-// recipient list can blow through that mid-loop, leaving the campaign
-// permanently stuck at status='sending' with no way to recover.
+// invocation can make (as low as 50 external calls on the Free plan), and
+// also cap CPU/wall time. A big recipient list can blow through either
+// mid-loop — the isolate gets killed outright (not a catchable JS error),
+// leaving the campaign permanently stuck at status='sending'.
 //
 // Fix: process a bounded CHUNK per invocation, record progress in
-// campaign_sends, and leave the campaign at status='sending' if contacts
-// remain — the cron in index.ts's scheduled() handler picks it back up on
-// the next tick and continues from where it left off. This makes sending
-// resumable and immune to a single invocation's subrequest ceiling.
+// campaign_sends, and if contacts remain, self-chain by firing an async
+// HTTP request back to this same worker's /internal/campaigns/:id/continue
+// route (see index.ts) instead of recursing in-process. That request spins
+// up a brand-new Worker invocation with its own fresh subrequest/CPU budget,
+// so each chunk is fully isolated no matter how long the recipient list is.
+// No cron/scheduler is required — this is a self-relay, not a poll.
 const CHUNK_SIZE = 20;
+
+// How stale campaigns.updated_at must be before we consider a 'sending'
+// campaign truly stalled (vs. just mid-chunk right now) and safe to resume
+// manually via the /send endpoint. See index.ts.
+export const STALL_THRESHOLD_SECONDS = 90;
 
 interface CampaignRow {
   id: string; user_id: string; org_id: string; subject: string; html_content: string;
@@ -22,7 +30,12 @@ interface CampaignRow {
   status: string; total_recipients: number; product_name?: string; product_image_url?: string;
 }
 
-export async function sendCampaign(campaignId: string, env: Env, ctx?: ExecutionContext): Promise<void> {
+export async function sendCampaign(
+  campaignId: string,
+  env: Env,
+  ctx?: ExecutionContext,
+  selfBaseUrl?: string
+): Promise<void> {
   const campaign = await env.DB.prepare('SELECT * FROM campaigns WHERE id = ?')
     .bind(campaignId).first() as CampaignRow | null;
 
@@ -193,24 +206,50 @@ export async function sendCampaign(campaignId: string, env: Env, ctx?: Execution
   }
 
   // Touch updated_at so we can tell this invocation made progress (used by
-  // ops/debugging to distinguish "actively progressing" from "truly stuck").
+  // both ops/debugging and the stall-detection in index.ts's /send route).
   await env.DB.prepare("UPDATE campaigns SET updated_at=datetime('now') WHERE id=?").bind(campaignId).run();
 
-  // If more contacts remain after this chunk, leave status='sending' —
-  // the cron tick in index.ts's scheduled() handler will call sendCampaign
-  // again and this function will pick up exactly where it left off, since
-  // "remaining" is always computed fresh from campaign_sends.
-  // If more contacts remain, process the next chunk sequentially (not in
-  // parallel via waitUntil) — this prevents a race where two chunks run at
-  // the same time, both read the same incomplete campaign_sends, and neither
-  // ever reaches the finalize block, leaving status stuck on 'sending'.
+  // If more contacts remain after this chunk, leave status='sending' and
+  // self-chain: fire an async request back to this same worker to process
+  // the next chunk in a fresh invocation. We deliberately do NOT recurse
+  // in-process here — that was the bug. A fresh HTTP-triggered invocation
+  // gets its own subrequest/CPU budget, so this scales to any list size.
   if (remaining.length > chunk.length) {
-    await sendCampaign(campaignId, env, ctx);
+    if (selfBaseUrl) {
+      const continueUrl = `${selfBaseUrl}/internal/campaigns/${campaignId}/continue`;
+      const secret = await env.INTERNAL_CHAIN_SECRET.get();
+      const doContinue = async () => {
+        // A couple of retries here because this fetch call itself counts
+        // against *this* invocation's subrequest budget, and we'd rather
+        // retry a flaky self-call than silently drop the chain.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await fetch(continueUrl, {
+              method: 'POST',
+              headers: { 'X-Internal-Secret': secret },
+            });
+            if (res.ok) return;
+          } catch {
+            // fall through to retry
+          }
+        }
+        // All retries failed — leave status='sending'. It's not permanently
+        // stuck: the /send endpoint's stall-detection (index.ts) lets it be
+        // manually resumed once updated_at goes stale, and the UI surfaces
+        // a "Resume sending" action in that case.
+      };
+      if (ctx) {
+        ctx.waitUntil(doContinue());
+      } else {
+        await doContinue();
+      }
+    }
+    // Whether or not we could self-chain, this invocation is done — return
+    // now instead of looping in-process.
     return;
   }
 
-  // This was the last chunk — finalize immediately rather than waiting for
-  // the next cron tick.
+  // This was the last chunk — finalize immediately.
   const counts = await env.DB.prepare(`
     SELECT
       SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) as sent,
