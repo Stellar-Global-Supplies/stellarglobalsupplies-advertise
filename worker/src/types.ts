@@ -15,6 +15,15 @@ export interface Env {
   // sending" requests (see sender.ts). Not a user-facing secret — just stops
   // randoms from hitting /internal/* and kicking off sends.
   INTERNAL_CHAIN_SECRET: SecretsStoreSecret;
+
+  // Service binding pointing the worker at itself. Used instead of a plain
+  // fetch() for the self-chained "continue sending" call in sender.ts —
+  // Cloudflare blocks a raw fetch() from a Worker back to its own
+  // route/hostname (error 1042, loop protection), but a service binding
+  // invokes the same script directly through the runtime, bypassing the
+  // edge entirely, so it isn't treated as a loop and doesn't cost a
+  // routed subrequest.
+  SELF: Fetcher;
 }
 
 // Cloudflare Secrets Store secret shape
